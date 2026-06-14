@@ -5,18 +5,21 @@ description: luxc commands for lexing, parsing, linting, formatting, compiling, 
 
 # CLI Reference
 
-During compiler development, run commands through Cargo:
+The CLI reference assumes the prebuilt `luxc` is available on `PATH`. Download
+the release archive, keep `packages/` next to `luxc.exe`, and run commands as:
 
 ```powershell
-cargo run -- <command>
+luxc <command>
 ```
 
-If you already built `luxc`, replace `cargo run --` with the path to the
-binary.
+If `luxc` is not on `PATH`, use the explicit executable path:
 
 ```powershell
-target\debug\luxc.exe <command>
+.\tools\luxc\luxc.exe <command>
 ```
+
+Compiler contributors can run the same commands from source, but normal Lux
+projects should use the prebuilt `luxc`.
 
 ## Command Overview
 
@@ -39,7 +42,7 @@ All paths are read and written as UTF-8 text.
 Print tokens for one file:
 
 ```powershell
-cargo run -- lex examples\features.lux
+luxc lex examples\features.lux
 ```
 
 Use this only when debugging parser or lexer behavior. Normal users should not
@@ -50,7 +53,7 @@ need it.
 Parse one file and print the syntax tree:
 
 ```powershell
-cargo run -- parse examples\features.lux
+luxc parse examples\features.lux
 ```
 
 This is useful when checking whether a new syntax form is recognized before
@@ -61,7 +64,7 @@ lowering or codegen is implemented.
 Run syntax, resolver, module, and style checks without generating Lua:
 
 ```powershell
-cargo run -- lint examples\features.lux
+luxc lint examples\features.lux
 ```
 
 `lint` reports diagnostics with source spans. It is the cheapest command to run
@@ -89,13 +92,13 @@ the rule rather than scattering suppressions.
 Check formatting:
 
 ```powershell
-cargo run -- format src\inventory\module.lux --check
+luxc format src\inventory\module.lux --check
 ```
 
 Write formatting changes:
 
 ```powershell
-cargo run -- format src\inventory\module.lux --write
+luxc format src\inventory\module.lux --write
 ```
 
 Formatter output is intended to preserve comments and keep Lux-specific syntax
@@ -107,19 +110,19 @@ command.
 Compile one Lux file to Lua:
 
 ```powershell
-cargo run -- compile examples\features.lux
+luxc compile examples\features.lux
 ```
 
 Emit source comments:
 
 ```powershell
-cargo run -- compile examples\features.lux --source-comments readable
+luxc compile examples\features.lux --source-comments readable
 ```
 
 Emit a sidecar source map:
 
 ```powershell
-cargo run -- compile examples\features.lux --map examples\features.lua.map.json
+luxc compile examples\features.lux --map examples\features.lua.map.json
 ```
 
 `compile` is for isolated examples and backend debugging. Use `gmod build` for
@@ -130,7 +133,7 @@ real addon projects so modules, packages, and realms are handled together.
 Map a generated Lua location back to Lux source:
 
 ```powershell
-cargo run -- map-error generated\features.lua.map.json 42:9
+luxc map-error generated\features.lua.map.json 42
 ```
 
 The input line/column should come from a GMod Lua stack trace or Lua syntax
@@ -142,19 +145,19 @@ the main way to recover Lux source locations.
 Build a GMod project from a manifest:
 
 ```powershell
-cargo run -- gmod build --manifest lux.toml
+luxc gmod build --manifest lux.toml
 ```
 
 Build with explicit paths:
 
 ```powershell
-cargo run -- gmod build src . --generated-root generated
+luxc gmod build src . --generated-root generated
 ```
 
 Preview the output plan without writing files:
 
 ```powershell
-cargo run -- gmod build --manifest lux.toml --dry-run
+luxc gmod build --manifest lux.toml --dry-run
 ```
 
 `gmod build` performs module discovery, package resolution, realm splitting,
@@ -165,14 +168,14 @@ loader generation, source map generation, and diagnostics for the whole project.
 Package a built addon with `gmad.exe`:
 
 ```powershell
-cargo run -- gmod package --manifest lux.toml --gmad C:\path\to\gmad.exe --out dist\my_addon.gma
+luxc gmod package --manifest lux.toml --gmad C:\path\to\gmad.exe --out dist\my_addon.gma
 ```
 
 Add `--run` to actually invoke `gmad`. Without `--run`, Lux prints the package
 plan so CI and release scripts can inspect it.
 
 ```powershell
-cargo run -- gmod package --manifest lux.toml --gmad C:\path\to\gmad.exe --out dist\my_addon.gma --run
+luxc gmod package --manifest lux.toml --gmad C:\path\to\gmad.exe --out dist\my_addon.gma --run
 ```
 
 Packaging does not replace `gmod build`; it packages the addon layout produced

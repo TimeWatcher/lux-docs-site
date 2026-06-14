@@ -5,33 +5,52 @@ description: Install prerequisites, compile a single file, create a GMod project
 
 # Getting Started
 
-This guide walks through the smallest useful Lux workflow: compile one file,
-write a multi-part module, then build a GMod addon layout.
+This guide walks through the smallest useful Lux workflow with the prebuilt
+`luxc`: install the compiler, compile one file, write a multi-part module, then
+build a GMod addon layout.
 
 ## Requirements
 
-Lux currently targets Lua 5.1 / GLua. For local development you need:
+Lux currently targets Lua 5.1 / GLua. For normal addon work you need:
 
-- Rust toolchain for building `luxc` from this repository.
-- Node.js only for the documentation site.
+- A prebuilt `luxc` release.
 - A Garry's Mod addon directory when testing generated artifacts in game.
+- Optional `gmad.exe` when packaging `.gma` files.
 
-Build the compiler from the repository root:
+Download the latest Windows release from [GitHub Releases](https://github.com/TimeWatcher/lux/releases).
+
+Extract it somewhere stable:
+
+```text
+tools/
+  luxc/
+    luxc.exe
+    packages/
+```
+
+Keep the bundled `packages/` directory next to `luxc.exe`; it contains the
+standard Lux packages used by imports such as `@lux/std` and `@lux/gmod`.
+
+Run the compiler from that directory:
 
 ```powershell
+.\tools\luxc\luxc.exe --help
+```
+
+For shorter commands, add the extracted directory to `PATH`, then use:
+
+```powershell
+luxc --help
+```
+
+If you are developing the compiler itself, clone the main repository and build
+from source:
+
+```powershell
+git clone --recurse-submodules https://github.com/TimeWatcher/lux.git
+cd lux\compiler
+cargo test
 cargo build
-```
-
-Run the compiler directly during development:
-
-```powershell
-cargo run -- --help
-```
-
-Or use the compiled binary:
-
-```powershell
-target\debug\luxc.exe --help
 ```
 
 ## Compile One File
@@ -44,7 +63,7 @@ examples/
 ```
 
 ```powershell
-cargo run -- compile examples\hello.lux
+luxc compile examples\hello.lux
 ```
 
 Single-file compilation is useful for checking syntax, generated Lua shape, and
@@ -174,7 +193,7 @@ my_addon/
 Build GMod artifacts:
 
 ```powershell
-cargo run -- gmod build --manifest lux.toml
+luxc gmod build --manifest lux.toml
 ```
 
 The build step discovers modules under `source_root`, infers realms from file
@@ -187,7 +206,7 @@ For experiments and CI slices, you can build from explicit source and addon
 paths:
 
 ```powershell
-cargo run -- gmod build --source-root src --addon-root . --generated-root generated
+luxc gmod build src . --generated-root generated
 ```
 
 Use a manifest for real projects. It keeps package ids, output roots, source map
@@ -198,13 +217,13 @@ settings, and extern policy in one stable place.
 Run linting without emitting artifacts:
 
 ```powershell
-cargo run -- lint src\inventory\module.lux
+luxc lint src\inventory\module.lux
 ```
 
 Format a file:
 
 ```powershell
-cargo run -- format src\inventory\module.lux
+luxc format src\inventory\module.lux --write
 ```
 
 Format whole project sources through your editor or a script until the CLI grows
@@ -216,7 +235,7 @@ GMod reports Lua stack traces. Lux emits source maps so you can map generated
 Lua locations back to Lux source.
 
 ```powershell
-cargo run -- map-error generated\lua\lux\client\my_addon\inventory.lua:42:9
+luxc map-error generated\lua\lux\client\my_addon\inventory.lua.map.json 42
 ```
 
 With readable source comments enabled, generated Lua also contains source

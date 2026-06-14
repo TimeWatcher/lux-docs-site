@@ -79,20 +79,19 @@ GMod 会把所有插件的文件挂载到同一个 `lua/` 命名空间下。Lux 
 使用配置文件：
 
 ```powershell
-cd C:\Development\gmod\lux\compiler
-cargo run -- gmod build --manifest path\to\lux.toml
+luxc gmod build --manifest path\to\lux.toml
 ```
 
 查看计划但不写文件：
 
 ```powershell
-cargo run -- gmod build --manifest path\to\lux.toml --dry-run
+luxc gmod build --manifest path\to\lux.toml --dry-run
 ```
 
 临时测试时也可以直接给路径：
 
 ```powershell
-cargo run -- gmod build path\to\src path\to\addon --generated-root path\to\generated
+luxc gmod build path\to\src path\to\addon --generated-root path\to\generated
 ```
 
 构建输出会报告模块数量、产物数量和三个 loader 路径：
@@ -142,7 +141,7 @@ end
 ## 打包为 GMA
 
 ```powershell
-cargo run -- gmod package `
+luxc gmod package `
   --manifest path\to\lux.toml `
   --gmad "C:\Program Files (x86)\Steam\steamapps\common\GarrysMod\bin\gmad.exe" `
   --out dist\my_addon.gma
@@ -157,7 +156,7 @@ package dry run: pass --run to execute gmad
 确认无误后再加 `--run`：
 
 ```powershell
-cargo run -- gmod package --manifest path\to\lux.toml --gmad path\to\gmad.exe --out dist\my_addon.gma --run
+luxc gmod package --manifest path\to\lux.toml --gmad path\to\gmad.exe --out dist\my_addon.gma --run
 ```
 
 ## 开发建议

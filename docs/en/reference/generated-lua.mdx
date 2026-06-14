@@ -93,10 +93,10 @@ The internal name remains private. Other modules can import `p_inv`, not
 ## Source Comment Modes
 
 ```powershell
-cargo run -- compile examples\features.lux --source-comments none
-cargo run -- compile examples\features.lux --source-comments readable
-cargo run -- compile examples\features.lux --source-comments boundary
-cargo run -- compile examples\features.lux --source-comments dense
+luxc compile examples\features.lux --source-comments none
+luxc compile examples\features.lux --source-comments readable
+luxc compile examples\features.lux --source-comments boundary
+luxc compile examples\features.lux --source-comments dense
 ```
 
 - `none`: production-friendly output with sidecar maps only.
@@ -113,7 +113,7 @@ Source maps connect generated Lua positions back to Lux source. They are used by
 `luxc map-error`:
 
 ```powershell
-cargo run -- map-error generated\hud.lua.map.json 42:9
+luxc map-error generated\hud.lua.map.json 42
 ```
 
 Expected output shape:

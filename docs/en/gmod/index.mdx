@@ -71,19 +71,20 @@ root remains build output. Source files stay under `src/`.
 Build through the manifest:
 
 ```powershell
-cargo run -- gmod build --manifest lux.toml
+luxc gmod build --manifest lux.toml
 ```
 
 Build with explicit paths:
 
 ```powershell
-cargo run -- gmod build --source-root src --addon-root . --generated-root generated
+luxc gmod build src . --generated-root generated
 ```
 
-Build with production-sized source comments:
+For production-sized source comments, set this in `lux.toml`:
 
-```powershell
-cargo run -- gmod build --manifest lux.toml --source-comments none
+```toml
+[gmod]
+source_comments = "none"
 ```
 
 Use source maps to map runtime Lua stack traces back to Lux source:

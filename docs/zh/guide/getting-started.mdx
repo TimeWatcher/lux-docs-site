@@ -1,6 +1,6 @@
 ---
 title: 快速开始
-description: 从源码构建 luxc，创建最小 GMod 项目，编译并定位生成文件。
+description: 安装预构建 luxc，创建最小 GMod 项目，编译并定位生成文件。
 ---
 
 # 快速开始
@@ -9,20 +9,45 @@ Lux 是面向 GLua 的离线编译语言。你在项目里写 `.lux` 文件，`l
 解析、宏展开、模块解析、运行域检查和 Lua 生成。进入 GMod 的仍然是普通 Lua 5.1 /
 GLua 文件，因此不需要游戏内解析器。
 
-本页假设你正在本仓库中开发 Lux。如果以后发布独立二进制，下面所有
-`cargo run -- ...` 都可以替换成 `luxc ...`。
+本页默认使用 GitHub Release 里的预构建 `luxc`。只有你要开发 Lux 编译器本身时，
+才需要从源码用 Cargo 构建。
 
 ## 环境要求
 
-- Rust toolchain：用于构建当前 Rust 版 `luxc`。
+- 预构建 `luxc`：从 GitHub Release 下载。
 - Garry's Mod：只有构建、运行插件时需要。
 - 可选的 `gmad.exe`：只有打包 `.gma` 时需要。
 
-先确认编译器能构建并通过测试：
+从 [GitHub Releases](https://github.com/TimeWatcher/lux/releases) 下载最新 Windows 预构建包。
+
+解压后保持这个结构：
+
+```text
+tools/
+  luxc/
+    luxc.exe
+    packages/
+```
+
+`packages/` 必须和 `luxc.exe` 同级，里面包含 `@lux/std`、`@lux/gmod`、
+`@lux/mgfx` 等标准包。
+
+确认编译器可运行：
 
 ```powershell
-cd C:\Development\gmod\lux\compiler
-cargo test --quiet
+.\tools\luxc\luxc.exe --help
+```
+
+也可以把 `tools\luxc` 加入 `PATH`，之后直接使用 `luxc ...`。下面示例都假设
+`luxc` 已经在 `PATH` 中。
+
+如果你要开发编译器源码，再使用：
+
+```powershell
+git clone --recurse-submodules https://github.com/TimeWatcher/lux.git
+cd lux\compiler
+cargo test
+cargo build
 ```
 
 ## 编译单个文件
@@ -30,15 +55,14 @@ cargo test --quiet
 仓库里的 `examples/features.lux` 覆盖了大部分语言特性，可以先用它确认编译器输出：
 
 ```powershell
-cd C:\Development\gmod\lux\compiler
-cargo run -- compile ..\examples\features.lux --source-comments readable
+luxc compile examples\features.lux --source-comments readable
 ```
 
 `compile` 会把生成的 Lua 打印到标准输出。需要源码映射时加 `--map`：
 
 ```powershell
-cargo run -- compile ..\examples\features.lux `
-  --map ..\examples\features.lua.map.json `
+luxc compile examples\features.lux `
+  --map examples\features.lua.map.json `
   --source-comments boundary
 ```
 
@@ -185,8 +209,7 @@ unknown_external = "warn"
 构建：
 
 ```powershell
-cd C:\Development\gmod\lux\compiler
-cargo run -- gmod build --manifest ..\examples\gmod_project\lux.toml
+luxc gmod build --manifest examples\gmod_project\lux.toml
 ```
 
 输出会包含：
@@ -206,7 +229,7 @@ generated/
 开发时可以先用 `--dry-run` 查看构建计划，不写任何文件：
 
 ```powershell
-cargo run -- gmod build --manifest path\to\lux.toml --dry-run
+luxc gmod build --manifest path\to\lux.toml --dry-run
 ```
 
 确认生成内容后，再把 `generated` 目录里的 `lua` 合并到你的 GMod 插件目录，或把
@@ -217,7 +240,7 @@ cargo run -- gmod build --manifest path\to\lux.toml --dry-run
 没有 `lux.toml` 时也可以显式给出源码目录和插件目录：
 
 ```powershell
-cargo run -- gmod build path\to\src path\to\addon --generated-root path\to\generated
+luxc gmod build path\to\src path\to\addon --generated-root path\to\generated
 ```
 
 这种形式适合临时测试；团队项目推荐使用 `lux.toml`，因为外部符号声明、源码注释
@@ -226,9 +249,9 @@ cargo run -- gmod build path\to\src path\to\addon --generated-root path\to\gener
 ## 检查和格式化
 
 ```powershell
-cargo run -- lint ..\examples\features.lux
-cargo run -- format ..\examples\features.lux --check
-cargo run -- format ..\examples\features.lux --write
+luxc lint examples\features.lux
+luxc format examples\features.lux --check
+luxc format examples\features.lux --write
 ```
 
 `format --check` 只检查，不修改文件。`format --write` 会原子写回，当前格式化器是
@@ -239,7 +262,7 @@ cargo run -- format ..\examples\features.lux --write
 如果 GMod 报的是生成 Lua 的行号，可以用源码映射查回 Lux 源文件：
 
 ```powershell
-cargo run -- map-error generated\lua\lux\client\my_addon\hud.lua.map.json 42
+luxc map-error generated\lua\lux\client\my_addon\hud.lua.map.json 42
 ```
 
 这会输出对应的 Lux 文件、行号和列号。调试阶段建议保留 `.lua.map.json` 文件，不要
