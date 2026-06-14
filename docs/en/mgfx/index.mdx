@@ -1,21 +1,25 @@
 ---
 title: MGFX
-description: Client-side MGFX package API, submodules, style model, draw calls, demos, and console tools.
+description: Entry point for the Lux-based MGFX rendering package and its standalone documentation.
 ---
 
 # MGFX
 
-MGFX is the client-side rendering package that Lux UI will build on. It is also
-the main stress test for Lux's GMod backend: multi-part modules, client realm
-exports, external GMod APIs, shader fallbacks, source maps, and large generated
-Lua chunks all meet here.
+MGFX is the Lux rendering package for Garry's Mod immediate UI effects. It is
+distributed as `@lux/mgfx` through the Lux package set and is documented in its
+own site:
 
-**License note:** MGFX is licensed separately for non-commercial use. Commercial
-use requires a separate written license from the copyright holder.
+- [MGFX documentation](https://timewatcher.github.io/mgfx-docs-site/)
+- [MGFX documentation repository](https://github.com/TimeWatcher/mgfx-docs-site)
+- [Lux packages repository](https://github.com/TimeWatcher/lux-packages)
 
-## Import and install
+This page is only the Lux-site entry point. Use the standalone MGFX
+documentation for API details, shader notes, performance guidance, and the
+Lux-based architecture.
 
-<LuxLuaPair title="Install the global MGFX API" luxLabel="Lux" luaLabel="Generated Lua">
+## Use from Lux
+
+<LuxLuaPair title="Install the optional MGFX facade" luxLabel="Lux" luaLabel="Generated Lua">
 
 ```lux
 import * as mgfx from "@lux/mgfx"
@@ -39,236 +43,24 @@ end
 
 </LuxLuaPair>
 
-The package is client-only. `mgfx.install(owner)` installs the API onto a table,
-`mgfx.create()` returns a fresh installed table, and `mgfx.installGlobal(name)`
-installs it on `_G[name]`.
+New Lux code should prefer explicit module imports such as `mgfx.paint`,
+`mgfx.style`, `mgfx.frame`, and `mgfx.widgets`. The `MGFX.*` global facade is
+for GLua-facing code, old panels, console demos, and gradual migration.
 
-<LuxLuaPair title="Create a private renderer" luxLabel="Lux" luaLabel="Generated Lua">
+## What Lux Handles
 
-```lux
-client fn createPrivateRenderer() {
-  local renderer = mgfx.create()
-  renderer.StartScreen(ScrW(), ScrH())
-  renderer.RoundedBox(32, 32, 240, 96, {
-    fill = renderer.LinearGradient(Color(40, 120, 255), Color(10, 240, 180)),
-    radius = 12,
-    shadow = { blur = 18, alpha = 120 },
-  })
-  renderer.EndScreen()
-}
-```
+`@lux/mgfx` is client-only. When a project imports it, `luxc gmod build`
+compiles the required module parts, keeps realm exports client-scoped, emits
+generated Lua, and generates the GMod loader. Do not copy the old MGFX Lua
+autorun loader into a Lux project.
 
-```lua
-local function createPrivateRenderer()
-  local renderer = mgfx.create()
-  renderer.StartScreen(ScrW(), ScrH())
-  renderer.RoundedBox(32, 32, 240, 96, {
-    fill = renderer.LinearGradient(Color(40, 120, 255), Color(10, 240, 180)),
-    radius = 12,
-    shadow = {
-      blur = 18,
-      alpha = 120,
-    },
-  })
-  renderer.EndScreen()
-end
-```
+MGFX is also a practical example of Lux package design: one package is split
+into submodules such as `frame`, `paint`, `style`, `text`, `widgets`,
+`materials`, and `shaderpack`, while module parts share internal scope and
+export only the public API.
 
-</LuxLuaPair>
+## License
 
-## Main package exports
-
-`@lux/mgfx` exports the installer functions and mounted submodules:
-
-```text
-install, installGlobal, create
-capabilities, commands, frame, geometry, materials, paint, primitives,
-profiler, roundrect, shaderpack, style, text, widgets
-```
-
-The installed owner uses PascalCase method names for GMod-style ergonomics:
-`RoundedBox`, `LinearGradient`, `StartPanel`, `Status`, and similar. Submodules
-keep Lux-style lower-case exports.
-
-## Drawing layer
-
-The `paint` module contains the high-level draw calls:
-
-```text
-roundedBox, chamferBox, poly, line, circle, capsule,
-image, icon, progressBar, segmentBar, ring, arc, sector
-```
-
-Every major primitive also has an `Ex` form that accepts a style table:
-
-<LuxLuaPair title="roundedBoxEx" luxLabel="Lux" luaLabel="Generated Lua">
-
-```lux
-mgfx.paint.roundedBoxEx(24, 24, 180, 56, {
-  fill = mgfx.style.solid(Color(24, 120, 255)),
-  stroke = Color(255, 255, 255, 48),
-  strokeWidth = 1,
-  radius = 10,
-})
-```
-
-```lua
-mgfx.paint.roundedBoxEx(24, 24, 180, 56, {
-  fill = mgfx.style.solid(Color(24, 120, 255)),
-  stroke = Color(255, 255, 255, 48),
-  strokeWidth = 1,
-  radius = 10,
-})
-```
-
-</LuxLuaPair>
-
-Non-`Ex` helpers are convenience wrappers for common argument shapes.
-
-## Style and capabilities
-
-`style` normalizes colors, gradients, masks, patterns, strokes, and effects.
-`capabilities` answers whether a target supports a style key and can normalize
-style slots for compound controls.
-
-<LuxLuaPair title="Normalize a style table" luxLabel="Lux" luaLabel="Generated Lua">
-
-```lux
-local fill = mgfx.style.linearGradient(
-  Color(80, 180, 255),
-  Color(100, 255, 180)
-)
-
-local normalized = mgfx.capabilities.normalizeStyle({
-  fill = fill,
-  outerGlow = { color = Color(80, 180, 255), blur = 14 },
-}, mgfx.capabilities.TARGET.ROUNDED_BOX)
-```
-
-```lua
-local fill = mgfx.style.linearGradient(
-  Color(80, 180, 255),
-  Color(100, 255, 180)
-)
-
-local normalized = mgfx.capabilities.normalizeStyle({
-  fill = fill,
-  outerGlow = {
-    color = Color(80, 180, 255),
-    blur = 14,
-  },
-}, mgfx.capabilities.TARGET.ROUNDED_BOX)
-```
-
-</LuxLuaPair>
-
-Unknown shader capability does not silently become a fake success. The current
-fallback renderer reports shader status through `materials.shaderStatus()` and
-the installed API's `shaderStatus()`.
-
-## Frame and geometry
-
-`frame` tracks the active panel or screen, clipping, queued commands, and debug
-overlay state. `geometry` handles transforms, image fitting, texture UVs, and
-draw statistics.
-
-<LuxLuaPair title="Draw inside a panel frame" luxLabel="Lux" luaLabel="Generated Lua">
-
-```lux
-mgfx.frame.startPanel(panel, w, h)
-mgfx.frame.withClip(0, 0, w, h, () => {
-  mgfx.paint.image(0, 0, w, h, material, 8, Color(255, 255, 255))
-})
-mgfx.frame.endPanel()
-```
-
-```lua
-mgfx.frame.startPanel(panel, w, h)
-mgfx.frame.withClip(0, 0, w, h, function()
-  mgfx.paint.image(0, 0, w, h, material, 8, Color(255, 255, 255))
-end)
-mgfx.frame.endPanel()
-```
-
-</LuxLuaPair>
-
-## Text and widgets
-
-`text` owns text measurement, style resolution, font registration, composed
-text rendering, batching, and profiling. `widgets` builds higher-level drawing
-helpers over `paint`, `text`, and geometry:
-
-```text
-widgets.progressBar, widgets.segmentBar, widgets.ring, widgets.arc,
-widgets.sector, widgets.image, widgets.icon, widgets.textBox
-```
-
-## Commands, console, and demos
-
-`commands` builds normalized command tables for record/replay style rendering.
-`console` installs client console commands for self-test, status, profile reset,
-text cache clearing, text demos, atlas debug, and parameter probes.
-
-<LuxLuaPair title="Install debugging tools" luxLabel="Lux" luaLabel="Generated Lua">
-
-```lux
-import * as console from "@lux/mgfx/console"
-import * as demo from "@lux/mgfx/demo"
-import * as wheelDemo from "@lux/mgfx/wheel_demo"
-
-client fn installTools(api) {
-  console.install(api)
-  demo.install(api)
-  wheelDemo.install(api)
-}
-```
-
-```lua
-local console = __lux_import("@lux/mgfx/console")
-local demo = __lux_import("@lux/mgfx/demo")
-local wheelDemo = __lux_import("@lux/mgfx/wheel_demo")
-
-local function installTools(api)
-  console.install(api)
-  demo.install(api)
-  wheelDemo.install(api)
-end
-```
-
-</LuxLuaPair>
-
-These packages are part of the Lux MGFX distribution, not external addon
-requirements.
-
-## Why MGFX is written in Lux style
-
-MGFX intentionally uses module parts instead of huge single files. For example,
-`widgets/src/module.lux` declares the complete part order:
-
-<LuxLuaPair title="MGFX widgets part order" luxLabel="Lux" luaLabel="Generated effect">
-
-```lux
-part order {
-  "module",
-  "cl_base",
-  "cl_progress",
-  "cl_rings",
-  "cl_image_source",
-  "cl_image_mask",
-  "cl_image_draw",
-  "cl_images",
-  "cl_text",
-  "cl_install",
-}
-```
-
-```lua
--- part order emits no runtime Lua.
--- It lets the compiler merge the widgets module in a stable order without
--- artificial numeric file prefixes.
-```
-
-</LuxLuaPair>
-
-That gives the module a stable entry and deterministic initialization without
-polluting file names with artificial numeric prefixes.
+MGFX is licensed separately for non-commercial use. Commercial use requires a
+separate written license from the copyright holder. The standalone MGFX docs
+repository contains the current license files and deployment notes.
