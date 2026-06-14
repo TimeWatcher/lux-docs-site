@@ -1,0 +1,451 @@
+---
+title: Imports and Exports
+description: Runtime imports, macro imports, module path resolution, public name mapping, realm exports, and public all.
+---
+
+# Imports and Exports
+
+Lux modules are private by default. Top-level declarations create bindings that
+are visible to all parts of the same module, but other modules only see names
+that are explicitly exported.
+
+`export` is a mapping from an internal binding to a public API name. It is not a
+general "make this file public" switch.
+
+## Import Forms
+
+Named imports bind selected public names from another module into the current
+part. Import aliases rename only the local binding.
+
+<LuxLuaPair title="Named import and alias" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+import { player_inventory as inventory, grant } from "inventory"
+
+grant(ply, inventory.defaultItem)
+```
+
+```lua
+local __lux_mod_inventory = __lux_import("inventory")
+local inventory = __lux_mod_inventory.player_inventory
+local grant = __lux_mod_inventory.grant
+
+grant(ply, inventory.defaultItem)
+```
+
+</LuxLuaPair>
+
+Namespace imports keep the imported module table under one local binding.
+
+<LuxLuaPair title="Namespace import" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+import * as inventory from "inventory"
+
+inventory.grant(ply, inventory.defaultItem)
+```
+
+```lua
+local inventory = __lux_import("inventory")
+
+inventory.grant(ply, inventory.defaultItem)
+```
+
+</LuxLuaPair>
+
+Side-effect imports load the module without binding its exports. Use these for
+registration modules, not for normal API sharing.
+
+<LuxLuaPair title="Side-effect import" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+import "hud/register"
+```
+
+```lua
+__lux_import("hud/register")
+```
+
+</LuxLuaPair>
+
+Macro imports are compile-time imports. They do not become runtime locals.
+
+<LuxLuaPair title="Macro import" luxLabel="Lux" luaLabel="Generated effect">
+
+```lux
+import macro { hookPaint } from "@lux/gmod/macros"
+```
+
+```text
+The macro binding is available to the compiler only.
+No runtime local named hookPaint is emitted.
+```
+
+</LuxLuaPair>
+
+Top-level imports are part-local. If two part files need the same external
+module, each part imports it explicitly.
+
+## Path Resolution
+
+Relative-looking paths without a package prefix resolve inside the current Lux
+project. Package paths use package ids such as `@lux/std`.
+
+<LuxLuaPair title="Project module and package module" luxLabel="Lux" luaLabel="Resolved meaning">
+
+```lux
+import { grant } from "inventory"
+import { arr } from "@lux/std"
+```
+
+```text
+"inventory" resolves from the current source root.
+"@lux/std" resolves from package roots or compiler-shipped packages.
+```
+
+</LuxLuaPair>
+
+Do not import another part file from the same module. All part files in one
+module already share the same logical module scope.
+
+## Imported Bindings Are Immutable
+
+An imported name is a local binding owned by the importing part. Reassigning it
+would make later use-sites ambiguous, so Lux rejects it.
+
+<LuxLuaPair title="Imported binding cannot be assigned" luxLabel="Lux" luaLabel="Diagnostic">
+
+```lux
+import { grant } from "inventory"
+
+grant = nil
+```
+
+```text
+error[IMPORT_ASSIGN]:
+cannot assign to imported binding `grant`
+```
+
+</LuxLuaPair>
+
+If a mutable wrapper is needed, create a new local variable.
+
+## Exports Are Public Name Mappings
+
+The simplest export maps a binding to the same public name.
+
+<LuxLuaPair title="Export same public API name" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+local player_inventory = {}
+
+export { player_inventory }
+```
+
+```lua
+local player_inventory = {}
+
+__lux_exports.player_inventory = player_inventory
+```
+
+</LuxLuaPair>
+
+Other modules import the public name, not the source filename or internal file
+layout.
+
+<LuxLuaPair title="Import the public name" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+import { player_inventory } from "inventory"
+```
+
+```lua
+local player_inventory = __lux_import("inventory").player_inventory
+```
+
+</LuxLuaPair>
+
+The Lua-style alias form maps `public_name = local_binding`.
+
+<LuxLuaPair title="Lua-style export alias" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+local player_inventory = {}
+
+export { p_inv = player_inventory }
+```
+
+```lua
+local player_inventory = {}
+
+__lux_exports.p_inv = player_inventory
+```
+
+</LuxLuaPair>
+
+After this export, external users can only import `p_inv`; the original internal
+name remains private.
+
+<LuxLuaPair title="Importing an exported alias" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+import { p_inv as inventory } from "inventory"
+```
+
+```lua
+local inventory = __lux_import("inventory").p_inv
+```
+
+</LuxLuaPair>
+
+Lux also accepts the JS-style export alias for readability in mixed teams.
+
+<LuxLuaPair title="as-style export alias" luxLabel="Lux" luaLabel="Equivalent generated Lua">
+
+```lux
+local player_inventory = {}
+
+export { player_inventory as p_inv }
+```
+
+```lua
+local player_inventory = {}
+
+__lux_exports.p_inv = player_inventory
+```
+
+</LuxLuaPair>
+
+The spec always defines the result as `exported_name -> binding_id`; both alias
+spells produce the same export entry.
+
+## Exported Declarations
+
+You can export while declaring a module-scope binding.
+
+<LuxLuaPair title="Exported declaration" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+export fn grant(ply, itemId) {
+  inventory.grant(ply, itemId)
+}
+```
+
+```lua
+local function grant(ply, itemId)
+  return inventory.grant(ply, itemId)
+end
+
+__lux_exports.grant = grant
+```
+
+</LuxLuaPair>
+
+Method path declarations are not module-scope bindings and cannot be exported
+directly.
+
+<LuxLuaPair title="Cannot export a method path declaration" luxLabel="Lux" luaLabel="Diagnostic">
+
+```lux
+export fn PANEL:Paint(w, h) {
+  paintPanel(self, w, h)
+}
+```
+
+```text
+error[EXPORT_DECL_NOT_BINDING]:
+exported declarations must create a module-scope binding
+```
+
+</LuxLuaPair>
+
+Use a private method path for GMod hooks and export a separate named helper
+when other modules need an API.
+
+## Realm Exports
+
+An export may have an explicit realm. The export realm controls which generated
+artifact exposes the public name.
+
+<LuxLuaPair title="Realm export" luxLabel="Lux" luaLabel="Generated Lua shape">
+
+```lux
+server fn grantServer(ply, itemId) {
+  grantItem(ply, itemId)
+}
+
+export server { grant = grantServer }
+```
+
+```lua
+-- server artifact
+local function grantServer(ply, itemId)
+  return grantItem(ply, itemId)
+end
+
+__lux_exports.grant = grantServer
+
+-- client artifact
+-- no grant export
+```
+
+</LuxLuaPair>
+
+Exported declarations can combine visibility and realm in one declaration.
+
+<LuxLuaPair title="Realm exported declaration" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+export client fn openInventoryPanel(ply) {
+  vgui.Create("LuxInventoryPanel"):OpenFor(ply)
+}
+```
+
+```lua
+local function openInventoryPanel(ply)
+  return vgui.Create("LuxInventoryPanel"):OpenFor(ply)
+end
+
+__lux_exports.openInventoryPanel = openInventoryPanel
+```
+
+</LuxLuaPair>
+
+The supported declaration order is:
+
+```text
+export [realm] fn name...
+[realm] fn name...
+```
+
+`client export fn ...` is intentionally not part of the style.
+
+## Exports Can Narrow, Not Expand
+
+An export cannot make a binding available in a realm where the binding itself is
+not available.
+
+<LuxLuaPair title="server-only cannot export as shared" luxLabel="Lux" luaLabel="Diagnostic">
+
+```lux
+server local player_inventory = {}
+
+export shared { p_inv = player_inventory }
+```
+
+```text
+error[EXPORT_REALM_EXPANDS_BINDING]:
+exported realms `shared` are not a subset of binding realms `server`
+```
+
+</LuxLuaPair>
+
+A shared binding may be exported as shared, client-only, or server-only. This is
+narrowing the public API surface, not changing the binding's safety.
+
+<LuxLuaPair title="Shared binding can be narrowed" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+fn normalizeId(id) tostring(id)
+
+export server { normalizeId }
+```
+
+```lua
+local function normalizeId(id)
+  return tostring(id)
+end
+
+-- server artifact
+__lux_exports.normalizeId = normalizeId
+
+-- client artifact
+-- normalizeId remains private
+```
+
+</LuxLuaPair>
+
+Formally, `exported_realms` must be a subset of `binding_available_realms`.
+
+## Export Restrictions
+
+MVP 0.1 keeps export rules strict:
+
+- Only module-scope bindings may be exported.
+- Imported bindings from another module cannot be re-exported directly.
+- The public exported name participates in duplicate export checks.
+- Exporting with an alias does not expose the original internal name.
+- Export realms cannot expand the binding's available realms.
+
+<LuxLuaPair title="Cannot re-export an imported binding" luxLabel="Lux" luaLabel="Diagnostic">
+
+```lux
+import { grant } from "inventory"
+
+export { grant }
+```
+
+```text
+error[EXPORT_IMPORTED_BINDING]:
+cannot export imported binding `grant`; wrap it in a module-local binding first
+```
+
+</LuxLuaPair>
+
+Wrap intentionally forwarded APIs so diagnostics and source maps point at your
+module.
+
+<LuxLuaPair title="Forward API through a wrapper" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+import { grant as grantInventory } from "inventory"
+
+export fn grant(ply, itemId) {
+  grantInventory(ply, itemId)
+}
+```
+
+```lua
+local grantInventory = __lux_import("inventory").grant
+
+local function grant(ply, itemId)
+  return grantInventory(ply, itemId)
+end
+
+__lux_exports.grant = grant
+```
+
+</LuxLuaPair>
+
+## `public all`
+
+`public all` is an escape hatch for modules that intentionally expose every
+module-scope binding in the current effective realm.
+
+<LuxLuaPair title="public all" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+public all
+
+fn add(a, b) a + b
+fn sub(a, b) a - b
+```
+
+```lua
+local function add(a, b)
+  return a + b
+end
+
+local function sub(a, b)
+  return a - b
+end
+
+__lux_exports.add = add
+__lux_exports.sub = sub
+```
+
+</LuxLuaPair>
+
+Prefer explicit `export { ... }` in application code. `public all` is best for
+small compatibility modules, generated modules, or packages whose entire file is
+already a public API surface.

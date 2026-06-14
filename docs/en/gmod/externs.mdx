@@ -1,0 +1,190 @@
+---
+title: GMod API and Externs
+description: Known GMod API realm data, unknown external policy, source externs, member-level externs, package-level extern config, and practical coverage limits.
+---
+
+# GMod API and Externs
+
+Lux ships realm data for common GMod APIs, but the whole addon ecosystem is too
+large and dynamic to model completely. Unknown external symbols are therefore
+allowed by default with a warning, not treated as proven shared-safe.
+
+The internal model is:
+
+```text
+Lux symbol       -> strict
+known GMod API   -> strict
+unknown external -> allow + warning by default
+```
+
+Unknown external symbols keep their own availability category:
+
+```text
+RealmAvailability =
+  Known(shared | client | server)
+  | UnknownExternal
+```
+
+This is safer than pretending unknown globals are shared, and more practical
+than rejecting every third-party addon global by default.
+
+## Default Behavior
+
+Known mismatches are errors. Unknown external symbols produce a warning unless
+project policy changes them to `allow` or `error`.
+
+```text
+warning[REALM_UNKNOWN]:
+cannot verify realm availability of external symbol `ThirdPartyAddon`
+used in shared context inside `run`
+
+Add an extern declaration to make this strict:
+  extern shared ThirdPartyAddon
+  extern client ThirdPartyAddon
+  extern server ThirdPartyAddon
+```
+
+Warning de-duplication is keyed by:
+
+```text
+(symbol_path, active_realm, containing_decl_binding_id)
+```
+
+That avoids spamming every use-site while still distinguishing, for example,
+use in a server-only function from use in shared code.
+
+## Policy Levels
+
+Configure unknown external behavior in `lux.toml`:
+
+```toml
+[target.gmod.realm]
+unknown_external = "warn"
+```
+
+Allowed values:
+
+```text
+allow  do not report unknown externals
+warn   report warnings; this is the default
+error  fail compilation; useful for CI and mature projects
+```
+
+Use `warn` while migrating a real addon. Move to `error` once important
+third-party globals have extern declarations.
+
+## Source Externs
+
+Declare external symbols in source when the knowledge is local to one module or
+small package.
+
+<LuxLuaPair title="Source extern" luxLabel="Lux" luaLabel="Check meaning">
+
+```lux
+extern server ThirdPartyAddon
+
+server fn runThirdParty() {
+  ThirdPartyAddon.Start()
+}
+```
+
+```lua
+-- The extern declaration emits no runtime Lua.
+-- The checker treats ThirdPartyAddon as server-only.
+```
+
+</LuxLuaPair>
+
+If the same call happens in shared context, Lux reports a realm mismatch.
+
+## Member-level Externs
+
+Many GMod and third-party tables are not one realm as a whole. Some members are
+server-only, some are client-only, and the root table may be shared.
+
+<LuxLuaPair title="Member-level extern uses longest-path matching" luxLabel="Lux" luaLabel="Check meaning">
+
+```lux
+extern shared net
+extern server net.Start
+extern client net.Receive
+```
+
+```lua
+-- net.Start   resolves to server
+-- net.Receive resolves to client
+-- net         falls back to shared
+```
+
+</LuxLuaPair>
+
+Resolution uses the longest path first. `ThirdPartyAddon.DoSomething` is tried
+before falling back to `ThirdPartyAddon`.
+
+<LuxLuaPair title="Third-party member-level extern" luxLabel="Lux" luaLabel="Check meaning">
+
+```lux
+extern shared FancyHud
+extern client FancyHud.OpenPanel
+extern server FancyHud.SyncState
+```
+
+```lua
+-- FancyHud.OpenPanel is client-only.
+-- FancyHud.SyncState is server-only.
+-- Other FancyHud members fall back to shared.
+```
+
+</LuxLuaPair>
+
+Use member-level externs whenever marking the whole table would be too broad.
+
+## Package-level Extern Config
+
+Large teams usually want externs in configuration instead of scattered across
+source files.
+
+```toml
+[target.gmod.extern]
+ThirdPartyAddon = "server"
+FancyHud = "client"
+SharedLibrary = "shared"
+```
+
+Structured entries support member paths:
+
+```toml
+[target.gmod.extern."ThirdPartyAddon.DoSomething"]
+realm = "server"
+```
+
+Configuration externs and source externs feed the same resolver. Duplicate
+conflicting declarations are diagnostics.
+
+## Known API Coverage
+
+Lux's GMod API database should cover common APIs first:
+
+- hook, timer, net, util, player, ents, vgui;
+- common entity, weapon, panel, surface, draw, render APIs;
+- shared constants and constructors such as `Color`, `Vector`, and `Angle`;
+- server/client-specific functions that appear frequently in addons.
+
+It will not cover every binary module, workshop dependency, or dynamic global.
+When a symbol is outside Lux's known data and outside Lux source, the compiler
+allows it by default with a warning. If you do not add an extern, you are
+accepting the runtime risk.
+
+## When to Write Externs
+
+Write an extern when:
+
+- a warning appears for a third-party global you intentionally use;
+- a shared file calls a member that is actually server-only or client-only;
+- a package wraps external GMod APIs and should expose strict realm information
+  to its users;
+- CI should reject unknown realm dependencies.
+
+Do not write broad `extern shared SomeLibrary` declarations just to silence
+warnings if the library has realm-specific members. Start with member-level
+externs for the calls you use.

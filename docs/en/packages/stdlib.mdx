@@ -1,0 +1,135 @@
+---
+title: Standard Library
+description: lux/std, lux/gmod, allocation-aware helpers, and API conventions.
+---
+
+# Standard Library
+
+The Lux standard library is intentionally small. It does not patch `table`,
+`string`, `math`, or GMod globals, and it does not wrap values in chainable
+objects. You import the modules you need explicitly; generated Lua turns those
+imports into ordinary locals.
+
+## `@lux/std`
+
+`@lux/std` is usable from pure Lua/GLua code and does not depend on GMod
+globals.
+
+- `arr` for dense one-based arrays
+- `dict` for key/value tables
+- `set` for boolean set tables
+- `str` for string utilities
+- `num` for numeric helpers
+- `func` for tiny function helpers
+- `pool` for table reuse
+
+<LuxLuaPair title="@lux/std imports" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+import { arr, dict } from "@lux/std"
+
+local names = arr.map(players, (player) => player:Nick())
+local merged = dict.merge(defaults, overrides)
+```
+
+```lua
+local __lux_std = __lux_import("@lux/std")
+local arr = __lux_std.arr
+local dict = __lux_std.dict
+
+local names = arr.map(players, function(player)
+  return player:Nick()
+end)
+local merged = dict.merge(defaults, overrides)
+```
+
+</LuxLuaPair>
+
+## Allocation-aware APIs
+
+APIs with simple names may allocate and are suitable for one-off transforms or
+non-hot paths.
+
+<LuxLuaPair title="Allocating helper" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+local mapped = arr.map(xs, (x) => x + 1)
+```
+
+```lua
+local mapped = arr.map(xs, function(x)
+  return x + 1
+end)
+```
+
+</LuxLuaPair>
+
+APIs ending in `Into` or `InPlace` reuse caller-provided tables:
+
+<LuxLuaPair title="Caller-owned output tables" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+arr.mapInto(xs, (x) => x + 1, out)
+arr.removeWhereInPlace(xs, (x) => x == nil)
+dict.mergeInto(out, defaults, overrides)
+```
+
+```lua
+arr.mapInto(xs, function(x)
+  return x + 1
+end, out)
+
+arr.removeWhereInPlace(xs, function(x)
+  return x == nil
+end)
+
+dict.mergeInto(out, defaults, overrides)
+```
+
+</LuxLuaPair>
+
+Use these in HUD paint, Think hooks, VGUI layout, and other per-frame paths.
+
+## `@lux/gmod`
+
+`@lux/gmod` is the GMod-specific helper package. It may use globals such as
+`IsValid`, `hook`, `timer`, `net`, `util`, `player`, `ents`, `Color`, and
+`vgui`.
+
+- `valid`
+- `hookx`
+- `timerx`
+- `netx`
+- `json`
+- `players`
+- `entsx`
+- `color`
+- `vgui`
+
+<LuxLuaPair title="@lux/gmod imports" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+import { valid, hookx, players } from "@lux/gmod"
+
+hookx.add("Think", "my_addon.tick", () => {
+  local out = {}
+  players.aliveInto(out)
+})
+```
+
+```lua
+local __lux_gmod = __lux_import("@lux/gmod")
+local valid = __lux_gmod.valid
+local hookx = __lux_gmod.hookx
+local players = __lux_gmod.players
+
+hookx.add("Think", "my_addon.tick", function()
+  local out = {}
+  players.aliveInto(out)
+end)
+```
+
+</LuxLuaPair>
+
+`netx.register` uses a `server { ... }` realm block internally so
+`util.AddNetworkString` is emitted only into the server artifact.

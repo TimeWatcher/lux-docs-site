@@ -1,0 +1,149 @@
+---
+title: GMod Backend
+description: GMod project builds, generated layout, realm artifacts, loaders, GMA packaging, and development recommendations.
+---
+
+# GMod Backend
+
+`luxc gmod build` turns Lux source modules into Garry's Mod Lua artifacts. The
+backend is responsible for discovery, realm splitting, loader generation,
+`AddCSLuaFile` routing, source maps, and package integration.
+
+## What the Backend Does
+
+The GMod backend performs these steps:
+
+```text
+1. Read lux.toml.
+2. Discover modules under source_root.
+3. Discover Lux packages from package_roots and compiler-shipped packages.
+4. Infer part realms from cl_/sv_/sh_ prefixes and realm directories.
+5. Resolve imports, exports, macros, and host transforms.
+6. Check realm availability and unknown extern policy.
+7. Emit server, client, and shared Lua artifacts.
+8. Emit generated loaders and source maps.
+```
+
+The result is a normal addon-shaped Lua tree that GMod can mount.
+
+## Minimal Configuration
+
+```toml
+[gmod]
+package_id = "my_addon"
+bundle_id = "my_addon"
+source_root = "src"
+addon_root = "."
+generated_root = "generated"
+source_comments = "readable"
+```
+
+`package_id` identifies the current project package. `bundle_id` is used in
+generated loader and registry names. Use a stable, addon-specific value to avoid
+collisions with other addons mounted in the same GMod `lua/` namespace.
+
+## Generated Layout
+
+Typical output:
+
+```text
+generated/
+  lua/
+    autorun/
+      lux_my_addon_init.lua
+    lux/
+      client/
+        my_addon/
+          hud.lua
+      server/
+        my_addon/
+          inventory.lua
+      shared/
+        my_addon/
+          items.lua
+```
+
+The exact file density may change as module merging improves, but the generated
+root remains build output. Source files stay under `src/`.
+
+## Build Commands
+
+Build through the manifest:
+
+```powershell
+cargo run -- gmod build --manifest lux.toml
+```
+
+Build with explicit paths:
+
+```powershell
+cargo run -- gmod build --source-root src --addon-root . --generated-root generated
+```
+
+Build with production-sized source comments:
+
+```powershell
+cargo run -- gmod build --manifest lux.toml --source-comments none
+```
+
+Use source maps to map runtime Lua stack traces back to Lux source:
+
+```text
+generated/lua/lux/client/my_addon/hud.lua:42:9 -> src/hud/cl_paint.lux:18:3
+```
+
+## Realm Artifacts
+
+Realm blocks and realm declarations control which artifact receives code.
+
+<LuxLuaPair title="server block only enters server artifact" luxLabel="Lux" luaLabel="Generated Lua shape">
+
+```lux
+fn ENT:Initialize() {
+  self:SetCustomCollisionCheck(true)
+
+  server {
+    self:PhysicsInitBox(Vector(-20, -20, 0), Vector(20, 20, 86))
+  }
+}
+```
+
+```lua
+function ENT:Initialize()
+  self:SetCustomCollisionCheck(true)
+
+  if SERVER then
+    self:PhysicsInitBox(Vector(-20, -20, 0), Vector(20, 20, 86))
+  end
+end
+```
+
+</LuxLuaPair>
+
+The checker uses the inner active realm for `PhysicsInitBox`, so server-only
+uses inside the block are accepted even when the surrounding function is shared.
+
+## Package as GMA
+
+After building, package the addon with GMod tools from the addon root:
+
+```powershell
+gmad.exe create -folder . -out my_addon.gma
+```
+
+Keep generated output inside the addon folder if it should be packaged. Keep
+large temporary build folders outside the addon root or exclude them from your
+packaging process.
+
+## Development Recommendations
+
+- Keep `src/` and `generated/` separate.
+- Put complete `part order` in the module entry part when initialization order
+  matters.
+- Prefer `cl_`, `sv_`, and `sh_` prefixes for files that map naturally to GMod
+  convention.
+- Use realm blocks for fine-grained server/client code inside shared hooks.
+- Treat unknown external warnings as work items; add `extern` declarations for
+  third-party APIs you rely on.
+- Do not hand-write `AddCSLuaFile` for Lux modules. The generated loader owns
+  client file routing.

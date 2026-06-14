@@ -1,0 +1,412 @@
+---
+title: 宏与 Host Transform
+description: 编译期宏、exprWithSetup、host transform、package phase 与运行时代码注入。
+---
+
+# 宏与 Host Transform
+
+Lux 的扩展系统全部发生在离线编译期。它不会在 GMod 运行时编译源码，也不会让宏返回
+原始 Lua 字符串。宏和 host transform 都返回结构化 AST/IR，之后仍然经过解析、
+解析绑定、运行域检查、source map 和 Lua 生成。
+
+这里有两个扩展层：
+
+- `macro`：在语法树阶段展开，适合生成声明、guard、hook 注册、重复模板。
+- `host transform`：在解析绑定之后改写 IR，适合把领域 DSL 降成更紧凑的运行时代码。
+
+## 包的三个阶段
+
+一个 Lux 包可以同时包含运行时代码、宏代码和 host transform 代码，但它们放在不同
+目录，生命周期也不同。
+
+```text
+packages/lux/ui/
+  src/          运行时代码，按模块图编译成 Lua
+  compiletime/  宏和编译期 helper，只在 luxc 中执行
+  host/         host transform，只在 luxc 中执行
+```
+
+`src/` 会进入生成产物；`compiletime/` 和 `host/` 不会被打包到 GMod 运行时。这样
+扩展能力可以用 Lux 写，但最终游戏里仍然只有普通 Lua。
+
+## 使用宏
+
+宏必须显式导入。`import macro` 创建的是编译期绑定，不是运行时 import，不会把对应
+包编进生成 Lua。
+
+<LuxLuaPair title="宏调用在编译期展开" luxLabel="使用方 Lux" luaLabel="生成 Lua">
+
+```lux
+import macro { dbg } from "@lux/macros"
+
+local exp = dbg(player?:GetNWInt("exp") ?? 0)
+```
+
+```lua
+local __value
+do
+  local __tmp = nil
+  if player ~= nil and player.GetNWInt ~= nil then
+    __tmp = player:GetNWInt("exp")
+  end
+  if __tmp == nil then
+    __tmp = 0
+  end
+
+  print("[dbg]", __tmp)
+  __value = __tmp
+end
+
+local exp = __value
+```
+
+</LuxLuaPair>
+
+上面的 Lua 是语义示意：重点是 `dbg(...)` 没有作为运行时函数调用留下来。宏在
+编译期把“求值一次、打印、返回原值”的结构展开到了使用点。
+
+命名空间形式也支持：
+
+<LuxLuaPair title="命名空间宏导入" luxLabel="Lux" luaLabel="生成效果">
+
+```lux
+import macro * as gmodMacros from "@lux/gmod/macros"
+
+gmodMacros.defineHook("HUDPaint", "my.hud", () => drawHud())
+```
+
+```text
+`import macro` 不生成运行时 Lua。
+`gmodMacros.defineHook(...)` 会在编译期展开成普通 hook 注册语句。
+```
+
+</LuxLuaPair>
+
+宏绑定只能调用，不能当普通值使用：
+
+<LuxLuaPair title="宏绑定不是运行时值" luxLabel="错误 Lux" luaLabel="编译期诊断">
+
+```lux
+local f = dbg -- error：macro binding 不是运行时值
+```
+
+```text
+error[MACRO_VALUE_BINDING]:
+macro binding `dbg` cannot be used as a runtime value
+```
+
+</LuxLuaPair>
+
+## 编写宏
+
+宏入口使用 `export macro fn`。普通 `export fn` 只是在编译期包内部或其他编译期包之间
+共享 helper，不会变成用户可 `import macro` 的宏。
+
+<LuxLuaPair title="最小表达式宏" luxLabel="宏包 Lux" luaLabel="使用后语义">
+
+```lux
+import * as m from "@lux/compile/macro"
+
+export macro fn identity(ctx, call) {
+  if not m.expectArgCount(ctx, call, 1, "identity(value)") {
+    return nil
+  }
+
+  return m.expr(call.args[1])
+}
+```
+
+```lua
+-- 使用方：
+-- local x = identity(makeValue())
+
+local x = makeValue()
+```
+
+</LuxLuaPair>
+
+宏函数接收两个参数：
+
+- `ctx`：编译器上下文，用于 `gensym`、诊断、运行时字符串等。
+- `call`：当前调用信息，包含参数、位置、来源、span 等。
+
+宏应返回 `m.expr(...)` 或 `m.stmts(...)`。表达式位置只能返回表达式展开；语句位置
+可以返回语句展开。如果返回位置不匹配，编译器会在调用点报错。
+
+## `exprWithSetup`
+
+很多宏既需要生成若干 setup 语句，又要在表达式位置返回一个值。不要为了这个目的
+生成 IIFE；GMod hot path 里额外闭包调用很贵。使用 `m.exprWithSetup(...)` 或别名
+`m.lowerIntoTarget(...)`。
+
+<LuxLuaPair title="带 setup 的表达式宏" luxLabel="宏包 Lux" luaLabel="使用后语义">
+
+```lux
+import * as m from "@lux/compile/macro"
+
+export macro fn once(ctx, call) {
+  if not m.expectArgCount(ctx, call, 1, "once(value)") {
+    return nil
+  }
+
+  local cached = m.localExpr(ctx, "value", call.args[1], call.span)
+
+  return m.exprWithSetup({
+    cached.stmt,
+  }, cached.ref, call.span)
+}
+```
+
+```lua
+-- 使用方：
+-- local x = once(makeValue())
+
+local x
+do
+  local __value = makeValue()
+  x = __value
+end
+```
+
+</LuxLuaPair>
+
+`exprWithSetup` 的结果会根据外层目标降低：
+
+- 在 `return` 里，生成 setup 后直接 `return value`。
+- 在局部变量或赋值里，生成 setup 后写入目标。
+- 在 Lua 没有直接语句表达式的位置，使用临时变量承接结果。
+
+宏作者要保持参数从左到右求值。如果一个参数会被多次使用，应先用
+`m.localExpr(...)` 缓存一次，再复用缓存引用。
+
+## 语句宏
+
+语句宏用于生成声明、注册、hook、网络消息等结构。它只能出现在语句位置。
+
+<LuxLuaPair title="GMod hook 宏" luxLabel="使用方 Lux" luaLabel="生成 Lua">
+
+```lux
+import macro { defineHook } from "@lux/gmod/macros"
+
+defineHook("HUDPaint", "my.hud", () => drawHud())
+```
+
+```lua
+do
+  local __event = "HUDPaint"
+  local __id = "my.hud"
+  local __callback = function()
+    return drawHud()
+  end
+
+  hook.Add(__event, __id, __callback)
+end
+```
+
+</LuxLuaPair>
+
+如果把语句宏写进需要值的位置，会得到诊断：
+
+<LuxLuaPair title="语句宏不能放在表达式位置" luxLabel="错误 Lux" luaLabel="编译期诊断">
+
+```lux
+local handle = defineHook("HUDPaint", "my.hud", () => drawHud())
+-- error：statement macro used in expression position
+```
+
+```text
+error[MACRO002]:
+statement macro `defineHook` cannot be used where a value is required
+```
+
+</LuxLuaPair>
+
+如果宏希望既能注册又能返回 handle，就应该返回 `exprWithSetup` 形式，而不是语句宏。
+
+## 运行域安全的宏
+
+宏生成的代码也要表达运行域。GMod 宏应该使用 `m.serverBlock(...)`、
+`m.clientBlock(...)` 或 `m.sharedBlock(...)`，而不是手写 `if SERVER then` 字符串。
+
+<LuxLuaPair title="server-only 宏展开不会在 client 求值参数" luxLabel="使用方 Lux" luaLabel="生成 Lua">
+
+```lux
+import macro { defineServerNetReceiver } from "@lux/gmod/macros"
+
+defineServerNetReceiver(makeName(), makeCallback())
+```
+
+```lua
+if SERVER then
+  local __name = makeName()
+  local __callback = makeCallback()
+
+  util.AddNetworkString(__name)
+  net.Receive(__name, __callback)
+end
+```
+
+</LuxLuaPair>
+
+注意参数求值位置：`makeName()` 和 `makeCallback()` 被放进 server block 内，所以
+客户端产物不会执行它们。这比旧式“生成一段 shared 代码，然后里面手写 `if SERVER`”
+更容易被运行域检查器理解。
+
+## Host Transform 是什么
+
+宏在解析绑定前运行，不知道一个名字到底来自哪里。host transform 在解析绑定和降低
+之后运行，所以它知道调用的符号是否来自某个特定 import。
+
+这使得 DSL 可以安全改写导入自某个包的 API，而不会误改用户同名局部变量。
+
+<LuxLuaPair title="只有来自目标模块的导入会被 host transform 改写" luxLabel="使用方 Lux" luaLabel="生成 Lua">
+
+```lux
+import { Column, Label } from "@lux/ui"
+
+local view = Column { gap = 8 } {
+  Label { text = "Hello" }
+}
+```
+
+```lua
+local __lux_ui_node = __lux_import("@lux/ui").node
+
+local view = __lux_ui_node("Column", {
+  gap = 8,
+}, {
+  __lux_ui_node("Label", {
+    text = "Hello",
+  }),
+})
+```
+
+</LuxLuaPair>
+
+如果用户自己定义了 `Column`，host transform 不会触发：
+
+<LuxLuaPair title="本地同名绑定不会触发 host transform" luxLabel="Lux" luaLabel="生成 Lua 形态">
+
+```lux
+local Column = makeColumn
+local view = Column { gap = 8 } -- 普通 tail table call
+```
+
+```lua
+local Column = makeColumn
+local view = Column({
+  gap = 8,
+})
+```
+
+</LuxLuaPair>
+
+## 编写 Host Transform
+
+host 包必须声明一个包合同，说明它能改写哪个运行时模块，以及需要从哪个运行时模块
+注入支持函数。
+
+<LuxLuaPair title="host transform 包结构" luxLabel="host 包 Lux" luaLabel="使用方生成形态">
+
+```lux
+import * as ir from "@lux/compile/ir"
+
+export host package {
+  target = "@lux/ui",
+  runtime = "@lux/ui",
+}
+
+export host expr fn foldNode(ctx, call) {
+  if call.imported ~= "Column" and call.imported ~= "Label" {
+    return nil
+  }
+
+  local node = ctx.importRuntime("node", "__lux_ui_node")
+
+  return ir.call(ir.ident(node, call.expr), {
+    ir.string(call.imported, call.expr),
+    -- props 和 children 由 host helper 从 tail table call 中提取
+  }, call.expr)
+}
+```
+
+```lua
+local __lux_ui_node = __lux_import("@lux/ui").node
+
+local view = __lux_ui_node("Column", props, children)
+```
+
+</LuxLuaPair>
+
+`target` 表示“哪些源模块的导入允许被改写”。`runtime` 表示“改写后需要注入哪个
+运行时模块的支持函数”。两者可以相同，也可以不同。
+
+`ctx.importRuntime(imported, preferredLocal)` 会确保运行时 import 存在，并返回实际
+可用的本地绑定名。编译器可能为了避免冲突而不采用 `preferredLocal`，所以 host
+transform 必须使用返回值。
+
+## `call.imported` 和 `call.local`
+
+host transform 同时能看到导出的原名和使用方本地名。
+
+<LuxLuaPair title="host transform 可见 imported/local 名称" luxLabel="Lux" luaLabel="transform call 信息">
+
+```lux
+import { Column as Stack } from "@lux/ui"
+
+Stack { gap = 8 }
+```
+
+```text
+call.imported = "Column"
+call.local    = "Stack"
+```
+
+</LuxLuaPair>
+
+此时：
+
+```text
+call.imported = "Column"
+call.local    = "Stack"
+```
+
+通常应使用 `call.imported` 判断语义，因为 `Stack` 只是使用方取的别名。只有当 DSL
+真的关心源码拼写时，才读取 `call.local`。
+
+## 宏与 host transform 的选择
+
+优先用宏处理“语法层面”的工作：
+
+- 生成一组普通 Lux 语句。
+- 根据参数生成 hook、net、console command 注册代码。
+- 需要在 resolver 前扩展语法结构。
+
+优先用 host transform 处理“已知 import 的领域调用”：
+
+- `Column { ... } { ... }` 这类 UI DSL。
+- 需要确认 `Column` 来自 `@lux/ui`，而不是用户局部变量。
+- 需要把友好 API 降成更小的运行时函数调用。
+
+两者都不应该返回原始 Lua 字符串。需要构造语法时使用 `@lux/compile/macro`，需要
+构造 IR 时使用 `@lux/compile/ir` 或 `@lux/compile/host`。
+
+## 诊断和错误
+
+宏和 host transform 有三类错误：
+
+- 用户错误：参数数量不对、位置不对、DSL 形状不合法。用 `ctx.error(...)` 或
+  helper 报到调用点。
+- 宏作者错误：helper 使用方式不合法，但能定位到用户调用。使用稳定诊断码报告。
+- 编译器内部错误：ABI 不一致或不可能状态。只有真正的实现缺陷才应走这一类。
+
+宏包不要用普通 `error(...)` 把用户错误变成编译器崩溃。能定位到源码 span 的问题，
+都应变成诊断。
+
+## 与 source map 的关系
+
+宏和 host transform 生成的是结构化节点，因此生成 Lua 仍能带 source map。宏作者
+传入 `call.span` 或参数自身 span，可以让报错和生成代码尽量指回用户写下的源码。
+
+这也是 Lux 不支持“宏返回一段 Lua 字符串”的原因：字符串拼接很容易破坏作用域、
+运行域、求值顺序和调试映射。

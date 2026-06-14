@@ -1,0 +1,191 @@
+---
+title: 命令行参考
+description: luxc 的 lex、parse、lint、format、compile、map-error、gmod build 和 gmod package。
+---
+
+# 命令行参考
+
+当前开发方式是从 Rust crate 运行：
+
+```powershell
+cd C:\Development\gmod\lux\compiler
+cargo run -- <command>
+```
+
+发布独立二进制后，命令前缀可以替换成：
+
+```powershell
+luxc <command>
+```
+
+## 命令总览
+
+```text
+luxc lex <path>
+luxc parse <path>
+luxc lint <path>
+luxc format <path> [--check] [--write]
+luxc compile <path> [--map <path>] [--source-comments [none|readable|boundary|dense]]
+luxc map-error <map.json> <generated-line>
+luxc gmod build <source-root> <addon-root> [--generated-root <path>] [--dry-run]
+luxc gmod build --manifest <lux.toml> [--generated-root <path>] [--dry-run]
+luxc gmod package --manifest <lux.toml> --gmad <path> --out <path> [--run] [--generated-root <path>]
+```
+
+## lex
+
+打印词法 token，主要用于调试 lexer：
+
+```powershell
+cargo run -- lex ..\examples\features.lux
+```
+
+输出包含行列号和 token 类型。词法错误会返回非零退出码。
+
+## parse
+
+解析并打印语法树：
+
+```powershell
+cargo run -- parse ..\examples\features.lux
+```
+
+这个命令适合调试语法和宏展开前后的结构，不用于日常构建。
+
+## lint
+
+运行语义风格检查：
+
+```powershell
+cargo run -- lint ..\examples\features.lux
+```
+
+当前 lint 覆盖典型 GLua 脚枪，例如可疑的尾表调用、被分号压制的返回、无意义自赋值
+和回调隐式返回。需要局部关闭时使用行内注释。
+
+<LuxLuaPair title="局部关闭 lint" luxLabel="Lux" luaLabel="检查含义">
+
+```lux
+-- lux-lint: allow LINT004
+drawPanel(self, w, h)
+```
+
+```text
+只关闭紧邻触发点的 LINT004。
+不要在文件顶部大范围压制 lint。
+```
+
+</LuxLuaPair>
+
+## format
+
+检查格式：
+
+```powershell
+cargo run -- format ..\examples\features.lux --check
+```
+
+写回格式化结果：
+
+```powershell
+cargo run -- format ..\examples\features.lux --write
+```
+
+不加 `--check` 和 `--write` 时，格式化结果打印到标准输出：
+
+```powershell
+cargo run -- format ..\examples\features.lux
+```
+
+`--check` 与 `--write` 不能同时使用。
+
+## compile
+
+编译单个 Lux 文件并把 Lua 打印到标准输出：
+
+```powershell
+cargo run -- compile ..\examples\features.lux
+```
+
+写出源码映射：
+
+```powershell
+cargo run -- compile ..\examples\features.lux `
+  --map ..\examples\features.lua.map.json
+```
+
+加入源码注释：
+
+```powershell
+cargo run -- compile ..\examples\features.lux --source-comments readable
+```
+
+可用模式：
+
+```text
+none      不插入源码注释
+readable  适合人工阅读
+boundary  在源码映射边界处插入
+dense     尽量密集插入
+```
+
+`compile` 适合调试语言特性。真实 GMod 插件应使用 `gmod build`，因为它会处理模块图、
+运行时包和 loader。
+
+## map-error
+
+把生成 Lua 的行号映射回 Lux 源码：
+
+```powershell
+cargo run -- map-error generated\lua\lux\client\my_addon\hud.lua.map.json 42
+```
+
+输出形状：
+
+```text
+C:\path\to\src\client\hud.lux:18:5
+```
+
+GMod 报错通常给的是生成 Lua 路径和行号。保留 `.lua.map.json` 后，可以用这个命令
+定位 Lux 源码位置。
+
+## gmod build
+
+使用配置文件：
+
+```powershell
+cargo run -- gmod build --manifest ..\examples\gmod_project\lux.toml
+```
+
+只生成计划，不写文件：
+
+```powershell
+cargo run -- gmod build --manifest ..\examples\gmod_project\lux.toml --dry-run
+```
+
+直接指定路径：
+
+```powershell
+cargo run -- gmod build src addon --generated-root generated
+```
+
+`--generated-root` 会覆盖配置里的 `generated_root`，适合临时输出到测试目录。
+
+## gmod package
+
+先构建，再打印 `gmad` 命令计划：
+
+```powershell
+cargo run -- gmod package `
+  --manifest path\to\lux.toml `
+  --gmad path\to\gmad.exe `
+  --out dist\addon.gma
+```
+
+真正执行：
+
+```powershell
+cargo run -- gmod package --manifest path\to\lux.toml --gmad path\to\gmad.exe --out dist\addon.gma --run
+```
+
+没有 `--run` 时不会调用 `gmad`。这是为了避免构建命令意外生成或覆盖发布包。

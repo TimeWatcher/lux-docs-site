@@ -1,0 +1,266 @@
+---
+title: MGFX
+description: MGFX 客户端渲染包、子模块、样式模型、绘制调用、demo 和控制台工具。
+---
+
+# MGFX
+
+MGFX 是 Lux UI 后续会建立在其上的客户端渲染包。它也是 Lux GMod 后端的主要压力
+测试：多 part 模块、客户端运行域导出、外部 GMod API、shader fallback、source map
+和大型生成 Lua chunk 都会在这里相遇。
+
+## 导入和安装
+
+<LuxLuaPair title="安装全局 MGFX API" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+import * as mgfx from "@lux/mgfx"
+import * as console from "@lux/mgfx/console"
+
+client fn installMgfx() {
+  local api = mgfx.installGlobal("MGFX")
+  console.install(api)
+}
+```
+
+```lua
+local mgfx = __lux_import("@lux/mgfx")
+local console = __lux_import("@lux/mgfx/console")
+
+local function installMgfx()
+  local api = mgfx.installGlobal("MGFX")
+  console.install(api)
+end
+```
+
+</LuxLuaPair>
+
+这个包是 client-only。`mgfx.install(owner)` 把 API 安装到一个 table 上，
+`mgfx.create()` 返回一个新的已安装 table，`mgfx.installGlobal(name)` 安装到
+`_G[name]`。
+
+<LuxLuaPair title="创建私有 renderer" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+client fn createPrivateRenderer() {
+  local renderer = mgfx.create()
+  renderer.StartScreen(ScrW(), ScrH())
+  renderer.RoundedBox(32, 32, 240, 96, {
+    fill = renderer.LinearGradient(Color(40, 120, 255), Color(10, 240, 180)),
+    radius = 12,
+    shadow = { blur = 18, alpha = 120 },
+  })
+  renderer.EndScreen()
+}
+```
+
+```lua
+local function createPrivateRenderer()
+  local renderer = mgfx.create()
+  renderer.StartScreen(ScrW(), ScrH())
+  renderer.RoundedBox(32, 32, 240, 96, {
+    fill = renderer.LinearGradient(Color(40, 120, 255), Color(10, 240, 180)),
+    radius = 12,
+    shadow = {
+      blur = 18,
+      alpha = 120,
+    },
+  })
+  renderer.EndScreen()
+end
+```
+
+</LuxLuaPair>
+
+## 主包导出
+
+`@lux/mgfx` 导出 installer 和挂载的子模块：
+
+```text
+install, installGlobal, create
+capabilities, commands, frame, geometry, materials, paint, primitives,
+profiler, roundrect, shaderpack, style, text, widgets
+```
+
+installed owner 使用 PascalCase method name，贴近 GMod 调用习惯，例如
+`RoundedBox`、`LinearGradient`、`StartPanel`、`Status`。子模块保留 Lux 风格的
+lower-case export。
+
+## 绘制层
+
+`paint` 模块包含高层绘制调用：
+
+```text
+roundedBox, chamferBox, poly, line, circle, capsule,
+image, icon, progressBar, segmentBar, ring, arc, sector
+```
+
+主要 primitive 都有 `Ex` 形式，接受 style table。
+
+<LuxLuaPair title="roundedBoxEx" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+mgfx.paint.roundedBoxEx(24, 24, 180, 56, {
+  fill = mgfx.style.solid(Color(24, 120, 255)),
+  stroke = Color(255, 255, 255, 48),
+  strokeWidth = 1,
+  radius = 10,
+})
+```
+
+```lua
+mgfx.paint.roundedBoxEx(24, 24, 180, 56, {
+  fill = mgfx.style.solid(Color(24, 120, 255)),
+  stroke = Color(255, 255, 255, 48),
+  strokeWidth = 1,
+  radius = 10,
+})
+```
+
+</LuxLuaPair>
+
+非 `Ex` helper 是常用参数形状的 convenience wrapper。
+
+## 样式和能力
+
+`style` 负责规范化 color、gradient、mask、pattern、stroke 和 effect。
+`capabilities` 用来判断某个 target 是否支持某个 style key，并能为复合控件规范化
+style slot。
+
+<LuxLuaPair title="样式规范化" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+local fill = mgfx.style.linearGradient(
+  Color(80, 180, 255),
+  Color(100, 255, 180)
+)
+
+local normalized = mgfx.capabilities.normalizeStyle({
+  fill = fill,
+  outerGlow = { color = Color(80, 180, 255), blur = 14 },
+}, mgfx.capabilities.TARGET.ROUNDED_BOX)
+```
+
+```lua
+local fill = mgfx.style.linearGradient(
+  Color(80, 180, 255),
+  Color(100, 255, 180)
+)
+
+local normalized = mgfx.capabilities.normalizeStyle({
+  fill = fill,
+  outerGlow = {
+    color = Color(80, 180, 255),
+    blur = 14,
+  },
+}, mgfx.capabilities.TARGET.ROUNDED_BOX)
+```
+
+</LuxLuaPair>
+
+未知 shader capability 不会被伪装成成功。当前 fallback renderer 通过
+`materials.shaderStatus()` 和 installed API 的 `shaderStatus()` 报告状态。
+
+## Frame 和 geometry
+
+`frame` 跟踪当前 panel 或 screen、clip、queued command 和 debug overlay。
+`geometry` 处理 transform、image fitting、texture UV 和 draw statistics。
+
+<LuxLuaPair title="panel 绘制帧" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+mgfx.frame.startPanel(panel, w, h)
+mgfx.frame.withClip(0, 0, w, h, () => {
+  mgfx.paint.image(0, 0, w, h, material, 8, Color(255, 255, 255))
+})
+mgfx.frame.endPanel()
+```
+
+```lua
+mgfx.frame.startPanel(panel, w, h)
+mgfx.frame.withClip(0, 0, w, h, function()
+  mgfx.paint.image(0, 0, w, h, material, 8, Color(255, 255, 255))
+end)
+mgfx.frame.endPanel()
+```
+
+</LuxLuaPair>
+
+## Text 和 widgets
+
+`text` 负责 text measurement、style resolution、font registration、composed text
+rendering、batching 和 profiling。`widgets` 在 `paint`、`text` 和 geometry 上提供
+更高层 helper：
+
+```text
+widgets.progressBar, widgets.segmentBar, widgets.ring, widgets.arc,
+widgets.sector, widgets.image, widgets.icon, widgets.textBox
+```
+
+## Commands、console 和 demos
+
+`commands` 构建用于 record/replay 风格渲染的 normalized command table。`console`
+安装客户端 console command，用于 self-test、status、profile reset、text cache
+clear、text demo、atlas debug 和 parameter probe。
+
+<LuxLuaPair title="安装调试工具" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+import * as console from "@lux/mgfx/console"
+import * as demo from "@lux/mgfx/demo"
+import * as wheelDemo from "@lux/mgfx/wheel_demo"
+
+client fn installTools(api) {
+  console.install(api)
+  demo.install(api)
+  wheelDemo.install(api)
+}
+```
+
+```lua
+local console = __lux_import("@lux/mgfx/console")
+local demo = __lux_import("@lux/mgfx/demo")
+local wheelDemo = __lux_import("@lux/mgfx/wheel_demo")
+
+local function installTools(api)
+  console.install(api)
+  demo.install(api)
+  wheelDemo.install(api)
+end
+```
+
+</LuxLuaPair>
+
+这些包是 Lux MGFX distribution 的一部分，不是外部 addon 依赖。
+
+## 为什么 MGFX 要写成 Lux style
+
+MGFX 有意使用 module part，而不是巨大的单文件。例如 `widgets/src/module.lux`
+声明完整顺序。
+
+<LuxLuaPair title="MGFX widgets 的 part order" luxLabel="Lux" luaLabel="生成效果">
+
+```lux
+part order {
+  "module",
+  "cl_base",
+  "cl_progress",
+  "cl_rings",
+  "cl_image_source",
+  "cl_image_mask",
+  "cl_image_draw",
+  "cl_images",
+  "cl_text",
+  "cl_install",
+}
+```
+
+```lua
+-- part order 不生成运行时代码。
+-- 它让 widgets 模块按声明顺序合并 part，
+-- 不需要在文件名里加入 00/10/20 这类人为前缀。
+```
+
+</LuxLuaPair>
+
+这给模块提供稳定入口和确定性初始化，同时不需要在文件名里加入人为的数字前缀。

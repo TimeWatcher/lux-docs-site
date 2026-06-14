@@ -1,0 +1,218 @@
+---
+title: 生成 Lua
+description: Lux 输出 Lua 的模块工厂、源码注释、源码映射、match 降低和 local 限制。
+---
+
+# 生成 Lua
+
+Lux 的输出必须能在 GMod 里直接运行，也必须能被开发者阅读和调试。GMod 报错发生在
+Lua 栈上，所以生成代码不是“黑盒产物”，而是开发体验的一部分。
+
+这一页的示例都使用右上角语言切换：看 Lux 源码，再切到“编译后 Lua”确认生成形态。
+实际临时变量名可能不同，但求值顺序、导出表和运行域行为应一致。
+
+## 单文件输出
+
+`compile` 命令会直接打印 Lua：
+
+```powershell
+cargo run -- compile ..\examples\features.lux --source-comments readable
+```
+
+单文件输出适合调试语法和生成策略。GMod 项目构建会再把模块包装成工厂，并由 loader
+注册。
+
+<LuxLuaPair title="单文件输出形态">
+
+```lux
+fn helper(x) =
+  x + 1
+
+export fn demo(value) =
+  helper(value) * 2
+```
+
+```lua
+local __lux_exports = {}
+
+local function helper(x)
+  return x + 1
+end
+
+local function demo(value)
+  return helper(value) * 2
+end
+
+__lux_exports.demo = demo
+return __lux_exports
+```
+
+</LuxLuaPair>
+
+## 模块工厂
+
+GMod 构建中的每个模块文件会被包装成一个 Lua 工厂。`__lux_import` 由 loader 注入。
+模块文件本身不创建全局 import 函数，也不依赖 Lua 的 `require`。
+
+<LuxLuaPair title="GMod 模块工厂">
+
+```lux
+import { arr } from "@lux/std"
+
+fn helper(x) =
+  x + 1
+
+export fn publicApi(values) =
+  arr.map(values, helper)
+```
+
+```lua
+return function(__lux_import)
+  local __lux_exports = {}
+  local arr = __lux_import("@lux/std").arr
+
+  local function helper(x)
+    return x + 1
+  end
+
+  local function publicApi(values)
+    return arr.map(values, helper)
+  end
+
+  __lux_exports.publicApi = publicApi
+  return __lux_exports
+end
+```
+
+</LuxLuaPair>
+
+## 导出表
+
+Lux 的导出映射会生成到 `__lux_exports`。内部名不会自动成为外部 API 名称。
+
+<LuxLuaPair title="导出别名">
+
+```lux
+local player_inventory = {}
+
+export { p_inv = player_inventory }
+```
+
+```lua
+local player_inventory = {}
+
+__lux_exports.p_inv = player_inventory
+```
+
+</LuxLuaPair>
+
+## 源码注释
+
+源码注释模式：
+
+```powershell
+cargo run -- compile examples\features.lux --source-comments none
+cargo run -- compile examples\features.lux --source-comments readable
+cargo run -- compile examples\features.lux --source-comments boundary
+cargo run -- compile examples\features.lux --source-comments dense
+```
+
+含义：
+
+- `none`：不插入注释，只依赖 sidecar source map。
+- `readable`：插入适合人工阅读的源码位置注释。
+- `boundary`：源码映射边界变化时插入注释。
+- `dense`：尽量对每个映射行插入注释。
+
+生产包可以用 `none` 或 `boundary`；调试迁移问题时用 `readable` 或 `dense`。
+
+## 源码映射
+
+加 `--map` 会写出 `.lua.map.json`：
+
+```powershell
+cargo run -- compile examples\features.lux --map examples\features.lua.map.json
+```
+
+GMod 项目构建会为每个生成 Lua 文件写出旁路映射：
+
+```text
+hud.lua
+hud.lua.map.json
+```
+
+使用 `map-error` 查询：
+
+```powershell
+cargo run -- map-error generated\lua\lux\client\my_addon\hud.lua.map.json 42
+```
+
+## match 降低
+
+Lux 的 `match` 不通过闭包表达式实现。普通值位置会降低成局部变量和条件链。在
+`return` 位置，后端可以直接生成 `return` 分支，避免不必要的临时变量。
+
+<LuxLuaPair title="match 值位置降低">
+
+```lux
+local label = match kind {
+  FillKind.Solid => "solid"
+  FillKind.Linear => "linear"
+}
+```
+
+```lua
+local label
+local __lux_match_1 = kind
+
+if __lux_match_1 == 0 then
+  label = "solid"
+elseif __lux_match_1 == 1 then
+  label = "linear"
+end
+```
+
+</LuxLuaPair>
+
+## 可选访问降低
+
+可选访问会捕获接收者，避免重复求值。`??` 只在结果为 `nil` 时使用 fallback，不会把
+`false` 当成空值。
+
+<LuxLuaPair title="可选访问和 nil 合并">
+
+```lux
+player?:GetName() ?? "Unknown"
+```
+
+```lua
+local __lux_obj = player
+local __lux_value = nil
+
+if __lux_obj ~= nil then
+  local __lux_method = __lux_obj.GetName
+  if __lux_method ~= nil then
+    __lux_value = __lux_method(__lux_obj)
+  end
+end
+
+if __lux_value == nil then
+  __lux_value = "Unknown"
+end
+```
+
+</LuxLuaPair>
+
+实际变量名由编译器生成，不保证稳定。
+
+## local 限制
+
+Lua 5.1 对单个函数有 local 变量数量限制。Lux 后端会尽量缩小临时变量作用域，避免
+生成超过 GMod 限制的函数。如果某段代码无法安全生成，应报告确定性诊断，而不是输出
+GMod 无法加载的 Lua。
+
+开发建议：
+
+- 不要把超大业务流程塞进一个函数。
+- 用模块 part 拆文件，不要用一个 1000 行函数承载所有逻辑。
+- 对热路径保留源码映射，必要时检查生成 Lua 的局部变量形状。

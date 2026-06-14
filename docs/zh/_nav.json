@@ -1,0 +1,32 @@
+[
+  {
+    "text": "指南",
+    "link": "/guide/getting-started",
+    "activeMatch": "/guide/"
+  },
+  {
+    "text": "语言",
+    "link": "/language/",
+    "activeMatch": "/language/"
+  },
+  {
+    "text": "GMod",
+    "link": "/gmod/",
+    "activeMatch": "/gmod/"
+  },
+  {
+    "text": "包",
+    "link": "/packages/",
+    "activeMatch": "/packages/"
+  },
+  {
+    "text": "MGFX",
+    "link": "/mgfx/",
+    "activeMatch": "/mgfx/"
+  },
+  {
+    "text": "参考",
+    "link": "/reference/cli",
+    "activeMatch": "/reference/"
+  }
+]

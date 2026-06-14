@@ -1,0 +1,336 @@
+:where(html:not(.rp-dark)) {
+  --rp-c-brand: #0f8f5b;
+  --rp-c-brand-dark: #0b7048;
+  --rp-c-brand-darker: #075c3b;
+  --rp-c-brand-light: #24aa71;
+  --rp-c-brand-lighter: #5bc891;
+  --rp-c-brand-tint: rgba(15, 143, 91, 0.12);
+
+  --rp-home-hero-name-background: linear-gradient(90deg, #0f4d38 0%, #0f8f5b 50%, #5b5ff0 100%);
+  --rp-home-hero-name-color: transparent;
+  --rp-home-hero-secondary-color: #0f8f5b;
+  --rp-c-bg-soft: #f6faf7;
+
+  --rp-code-title-bg: #f0f1f3;
+  --rp-code-block-color: #20242c;
+  --rp-code-block-bg: #f8f8f5;
+  --rp-code-block-border: 1px solid rgba(32, 36, 44, 0.12);
+  --rp-code-block-shadow: 0 12px 28px rgba(24, 31, 42, 0.08);
+  --rp-code-line-highlight-color: rgba(55, 91, 210, 0.11);
+
+  --shiki-foreground: #20242c;
+  --shiki-background: transparent;
+  --shiki-token-constant: #b45309;
+  --shiki-token-string: #0b7a43;
+  --shiki-token-comment: #6d7480;
+  --shiki-token-keyword: #7c3aed;
+  --shiki-token-parameter: #a16207;
+  --shiki-token-function: #1557b0;
+  --shiki-token-string-expression: #0b7a43;
+  --shiki-token-punctuation: #475569;
+  --shiki-token-link: #1557b0;
+  --shiki-token-deleted: #b42318;
+  --shiki-token-inserted: #147d48;
+}
+
+:where(html.rp-dark) {
+  --rp-c-brand: #55d993;
+  --rp-c-brand-dark: #20bd75;
+  --rp-c-brand-darker: #0f9f62;
+  --rp-c-brand-light: #86efac;
+  --rp-c-brand-lighter: #bbf7d0;
+  --rp-c-brand-tint: rgba(85, 217, 147, 0.16);
+  --rp-c-bg-soft: #111817;
+  --rp-home-hero-name-background: linear-gradient(90deg, #20bd75 0%, #20bd75 30%, #a673ff 100%);
+  --rp-home-hero-secondary-color: #55d993;
+
+  --rp-code-title-bg: #191b21;
+  --rp-code-block-color: #e7e9ee;
+  --rp-code-block-bg: #101218;
+  --rp-code-block-border: 1px solid rgba(231, 233, 238, 0.14);
+  --rp-code-block-shadow: none;
+  --rp-code-line-highlight-color: rgba(125, 162, 255, 0.16);
+
+  --shiki-foreground: #e7e9ee;
+  --shiki-background: transparent;
+  --shiki-token-constant: #f7b267;
+  --shiki-token-string: #67d391;
+  --shiki-token-comment: #818895;
+  --shiki-token-keyword: #c79bff;
+  --shiki-token-parameter: #ffd166;
+  --shiki-token-function: #8ab4ff;
+  --shiki-token-string-expression: #67d391;
+  --shiki-token-punctuation: #b8bfcc;
+  --shiki-token-link: #8ab4ff;
+  --shiki-token-deleted: #ff8a9a;
+  --shiki-token-inserted: #74dfa0;
+}
+
+.rp-home-hero {
+  padding-bottom: 42px;
+}
+
+.rp-home-background {
+  background:
+    radial-gradient(42% 58% at 100% 0%, rgba(91, 95, 240, 0.34) 0%, rgba(91, 95, 240, 0) 72%),
+    radial-gradient(50% 72% at 0% 18%, rgba(15, 143, 91, 0.3) 0%, rgba(15, 143, 91, 0) 72%),
+    radial-gradient(56% 80% at 52% 0%, rgba(20, 184, 166, 0.2) 0%, rgba(20, 184, 166, 0) 76%),
+    linear-gradient(90deg, rgba(15, 143, 91, 0.11) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(91, 95, 240, 0.09) 1px, transparent 1px),
+    linear-gradient(135deg, #fbfffd 0%, #ecf8ff 52%, #f8f7ff 100%) !important;
+  background-size: auto, auto, auto, 56px 56px, 56px 56px, auto;
+}
+
+:where(html.rp-dark) .rp-home-background {
+  background:
+    radial-gradient(42% 56% at 100% 0%, rgba(30, 64, 175, 0.62) 0%, rgba(18, 18, 18, 0) 100%),
+    radial-gradient(56% 88% at 48% 0%, rgba(0, 0, 0, 0.96) 0%, rgba(18, 18, 18, 0) 100%),
+    radial-gradient(46% 76% at 0% 20%, rgba(96, 40, 190, 0.5) 0%, rgba(18, 18, 18, 0) 78%),
+    linear-gradient(90deg, rgba(85, 217, 147, 0.08) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(166, 115, 255, 0.07) 1px, transparent 1px),
+    #121212 !important;
+  background-size: auto, auto, auto, 64px 64px, 64px 64px, auto;
+}
+
+.rp-home-hero .rp-button--brand {
+  background: linear-gradient(90deg, #0f8f5b 0%, #14b8a6 52%, #6d5dfc 100%);
+}
+
+.rp-home-hero__image {
+  filter: drop-shadow(0 26px 60px rgba(15, 23, 42, 0.22));
+}
+
+:where(html.rp-dark) .rp-home-hero__image {
+  filter: drop-shadow(0 30px 70px rgba(0, 0, 0, 0.42));
+}
+
+:where(html.rp-dark) .rp-home-hero .rp-button--brand {
+  color: #06120d;
+  background: linear-gradient(90deg, #20bd75 0%, #55d993 42%, #a673ff 100%);
+}
+
+.rp-home-feature {
+  border-radius: 8px;
+}
+
+.rp-doc h2,
+.rp-doc h3 {
+  letter-spacing: 0;
+}
+
+.rp-codeblock {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.rp-codeblock__content {
+  color: var(--rp-code-block-color);
+}
+
+.rp-codeblock .shiki {
+  color: var(--shiki-foreground);
+  background: transparent !important;
+}
+
+.rp-codeblock.language-lux {
+  --shiki-token-keyword: #8b2fc9;
+  --shiki-token-function: #0f5cad;
+  --shiki-token-string: #097447;
+  --shiki-token-string-expression: #097447;
+  --shiki-token-constant: #bd4f00;
+  --shiki-token-parameter: #946200;
+  --shiki-token-comment: #667080;
+  --shiki-token-punctuation: #4b5563;
+}
+
+:where(html.rp-dark) .rp-codeblock.language-lux {
+  --shiki-token-keyword: #d18cff;
+  --shiki-token-function: #8fc3ff;
+  --shiki-token-string: #7be29b;
+  --shiki-token-string-expression: #7be29b;
+  --shiki-token-constant: #ffbd7a;
+  --shiki-token-parameter: #f6d365;
+  --shiki-token-comment: #89919f;
+  --shiki-token-punctuation: #c0c7d2;
+}
+
+.rp-doc :not(pre) > code {
+  border: 1px solid rgba(30, 41, 59, 0.12);
+  background: rgba(15, 23, 42, 0.05);
+  color: #1e3a8a;
+}
+
+:where(html.rp-dark) .rp-doc :not(pre) > code {
+  color: #9ec5ff;
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+.lux-stage {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin: 24px 0;
+}
+
+.lux-stage > div {
+  border: 1px solid var(--rp-c-divider);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: var(--rp-c-bg-soft);
+}
+
+.lux-stage strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--rp-c-text-1);
+}
+
+.lux-stage span {
+  color: var(--rp-c-text-2);
+  font-size: 14px;
+}
+
+.lux-callout-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 20px 0 28px;
+}
+
+.lux-callout-grid > div {
+  border: 1px solid var(--rp-c-divider);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: var(--rp-c-bg-soft);
+}
+
+.lux-callout-grid strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.lux-callout-grid p {
+  margin: 0;
+  color: var(--rp-c-text-2);
+}
+
+.lux-lua-pair {
+  position: relative;
+  margin: 22px 0 28px;
+  border: 1px solid var(--rp-c-divider);
+  border-radius: 8px;
+  background: var(--rp-code-block-bg);
+  overflow: hidden;
+}
+
+.lux-lua-pair__title {
+  min-height: 46px;
+  padding: 14px 190px 10px 14px;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--rp-c-text-1);
+  background: var(--rp-c-bg-soft);
+  border-bottom: 1px solid var(--rp-c-divider);
+}
+
+.lux-lua-pair__switch {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid rgba(148, 163, 184, 0.36);
+  border-radius: 7px;
+  background: rgba(248, 250, 252, 0.92);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.1);
+  backdrop-filter: blur(10px);
+}
+
+:where(html.rp-dark) .lux-lua-pair__switch {
+  background: rgba(18, 22, 29, 0.9);
+  border-color: rgba(148, 163, 184, 0.24);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+}
+
+.lux-lua-pair__switch button {
+  min-width: 74px;
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--rp-c-text-2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 28px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.lux-lua-pair__switch button:hover {
+  color: var(--rp-c-text-1);
+}
+
+.lux-lua-pair__switch button.is-active {
+  color: #ffffff;
+  background: var(--rp-c-brand);
+}
+
+:where(html.rp-dark) .lux-lua-pair__switch button.is-active {
+  color: #06120d;
+}
+
+.lux-lua-pair__panel {
+  min-width: 0;
+}
+
+.lux-lua-pair .rp-codeblock {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.lux-lua-pair--invalid {
+  padding: 12px;
+}
+
+@media (max-width: 640px) {
+  .lux-stage,
+  .lux-callout-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .lux-lua-pair__title {
+    min-height: 82px;
+    padding: 48px 10px 10px;
+  }
+
+  .lux-lua-pair__switch {
+    right: 8px;
+    left: 8px;
+    justify-content: flex-end;
+  }
+
+  .lux-lua-pair__switch button {
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+}
+
+@media (max-width: 768px) {
+  html .rp-doc-layout__doc {
+    overflow-x: hidden;
+  }
+
+  html .rp-doc-layout__doc-container,
+  html .rspress-doc {
+    min-width: 0;
+    width: 100%;
+  }
+}

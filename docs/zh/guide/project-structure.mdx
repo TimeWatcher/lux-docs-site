@@ -1,0 +1,217 @@
+---
+title: 项目结构
+description: Lux 项目的目录约定、模块发现、入口 part、运行域推断和生成目录。
+---
+
+# 项目结构
+
+Lux 的项目结构遵循一个原则：能从目录和文件名表达的信息，不强迫开发者写进配置文件。
+`lux.toml` 只描述项目边界和少量策略；模块、运行域和 part 关系主要来自源码树。
+
+## 推荐布局
+
+```text
+my_addon/
+  addon.json
+  lux.toml
+  src/
+    shared/
+      inventory/
+        module.lux
+        sh_items.lux
+      hud.lux
+    server/
+      inventory/
+        sv_store.lux
+      init.lux
+    client/
+      inventory/
+        cl_panel.lux
+      ui.lux
+```
+
+目录含义：
+
+- `src` 是 Lux 源码根目录。
+- `shared`、`client`、`server` 是运行域目录；最近的运行域目录决定默认运行域。
+- `inventory/` 这样的普通目录是模块目录。
+- `module.lux`、`cl_module.lux`、`sv_module.lux`、`sh_module.lux` 是模块入口 part。
+- `cl_`、`sv_`、`sh_` 前缀也能声明 part 的默认运行域。
+
+## 配置文件
+
+当前 `lux.toml` 支持这些字段：
+
+```toml
+[gmod]
+source_root = "src"
+addon_root = "."
+generated_root = "generated"
+package_id = "my_addon"
+bundle_id = "my_addon"
+package_roots = "packages, vendor/lux-packages"
+source_comments = "boundary"
+
+[target.gmod.realm]
+unknown_external = "warn"
+
+[target.gmod.extern]
+ThirdPartyAddon = "server"
+FancyHud.Open = "client"
+SharedLibrary = "shared"
+```
+
+也可以使用顶层字段：
+
+```toml
+source_root = "src"
+addon_root = "generated"
+```
+
+路径相对于 `lux.toml` 所在目录解析。`generated_root` 省略时默认等于 `addon_root`。
+开发阶段建议把生成目录放到独立位置，避免覆盖手写文件。
+
+## 模块发现
+
+Lux 项目构建会递归扫描 `source_root` 下的所有 `.lux` 文件。模块路径由文件相对路径
+推断：
+
+```text
+src/shared/hud.lux                    -> hud
+src/shared/inventory/module.lux       -> inventory
+src/client/inventory/cl_panel.lux     -> inventory
+src/server/admin/users.lux            -> admin/users
+```
+
+运行域目录不会进入模块路径。文件名前缀 `cl_`、`sv_`、`sh_` 也不会进入模块路径；
+它只影响默认运行域。
+
+这意味着下面三个文件属于同一个模块：
+
+```text
+src/shared/inventory/module.lux
+src/server/inventory/sv_store.lux
+src/client/inventory/cl_panel.lux
+```
+
+它们共享一个模块私有作用域，可以互相看见顶层声明，但仍然受运行域检查约束。
+
+## 模块入口
+
+多 part 模块必须有且只有一个入口 part：
+
+```text
+module.lux
+cl_module.lux
+sv_module.lux
+sh_module.lux
+```
+
+入口 part 的职责：
+
+- 放 `part order { ... }`，声明完整初始化顺序。
+- 放模块级导出，让公开 API 集中可见。
+- 放少量共享常量或轻量工具函数。
+- 作为开发者打开模块时的“主文件”。
+
+单文件模块不需要入口 part；该文件本身就是模块。
+
+## Part 顺序
+
+函数声明会在整个模块内提升，所以函数之间可以跨 part 互相调用。非函数顶层局部值
+不会按值提升，它们按 part 初始化顺序执行。
+
+默认顺序是入口 part 在前，其余 part 按稳定路径排序。只要顶层初始化有依赖，就应该
+在入口 part 写完整顺序。
+
+<LuxLuaPair title="完整 part order" luxLabel="Lux" luaLabel="生成效果">
+
+```lux
+part order { "module", "sh_items", "sv_store", "cl_panel" }
+```
+
+```lua
+-- part order 不生成运行时代码。
+-- 它告诉编译器按以下顺序合并 part：
+-- module.lux -> sh_items.lux -> sv_store.lux -> cl_panel.lux
+```
+
+</LuxLuaPair>
+
+`part before` 和 `part after` 适合很小的局部约束。
+
+<LuxLuaPair title="局部 part 约束" luxLabel="Lux" luaLabel="生成效果">
+
+```lux
+part after "sh_items"
+part before "cl_panel"
+```
+
+```lua
+-- before/after 不生成运行时代码。
+-- 它们只给当前 part 添加排序约束。
+```
+
+</LuxLuaPair>
+
+不要用一串 `before` / `after` 编排大型模块。完整编排应使用 `part order`。
+
+## 运行域推断
+
+默认运行域来自两类信息：
+
+```text
+src/client/ui.lux       -> client
+src/server/init.lux     -> server
+src/shared/hud.lux      -> shared
+src/foo/cl_panel.lux    -> client
+src/foo/sv_store.lux    -> server
+src/foo/sh_items.lux    -> shared
+```
+
+目录和前缀冲突会报错：
+
+```text
+src/client/sv_store.lux
+```
+
+这里最近的目录表示 `client`，文件前缀表示 `server`，编译器会拒绝它。
+
+## 生成目录
+
+GMod 后端生成的是普通 Lua 插件结构：
+
+```text
+generated/
+  lua/
+    autorun/
+      lux_my_addon_init.lua
+      client/lux_my_addon_cl_init.lua
+      server/lux_my_addon_sv_init.lua
+    lux/
+      client/
+      server/
+```
+
+loader 文件名带 `bundle_id`，避免不同插件都生成 `lux_init.lua` 而互相覆盖。客户端
+文件的 `AddCSLuaFile` 会按块批量生成，不再要求开发者手写冗长 loader。
+
+## 包目录
+
+Lux 自带包在仓库的 `packages/` 下。项目可以通过 `package_roots` 增加包根：
+
+```toml
+[gmod]
+package_roots = "packages, vendor/lux-packages"
+```
+
+包内部同样使用约定目录：
+
+```text
+packages/lux/std/src/module.lux
+packages/lux/macros/compiletime/module.lux
+packages/lux/ui/host/module.lux
+```
+
+运行时代码进入生成 Lua；编译时代码只在 `luxc` 内执行；宿主变换用于把特定领域语法
+折叠成更小的运行时代码。

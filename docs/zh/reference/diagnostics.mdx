@@ -1,0 +1,239 @@
+---
+title: 诊断
+description: Lux 诊断代码、常见错误、warning 策略、lint 关闭方式和修复路径。
+---
+
+# 诊断
+
+Lux 诊断的目标是指向源码规则，而不是让开发者从生成 Lua 里倒推错误。构建失败时，
+应优先阅读 diagnostic code、主标签和建议修复方式。
+
+## 严重级别
+
+```text
+error    阻止生成，必须修复
+warning  允许继续生成，但存在风险或迁移债务
+```
+
+当前最典型的 warning 是 `REALM_UNKNOWN`：未知外部符号默认允许，但编译器无法证明
+运行域安全。
+
+## 解析错误
+
+解析错误使用 `PARSExxx` 代码。解析错误发生在语义检查之前，所以后续模块、运行域和
+导出错误可能暂时不会显示。先修语法，再看下一批诊断。
+
+<LuxLuaPair title="extern 缺少运行域" luxLabel="错误 Lux" luaLabel="诊断/修复">
+
+```lux
+extern ThirdPartyAddon
+```
+
+```text
+error[PARSE017]: `extern` requires a realm: `shared`, `client`, or `server`
+
+修复：
+extern server ThirdPartyAddon
+```
+
+</LuxLuaPair>
+
+## 模块图错误
+
+模块相关诊断使用 `MODULExxx`，常见原因：
+
+- 导入的模块不存在。
+- 导入名称不是目标模块公开 API。
+- 导出公开名重复。
+- 导出试图转发 imported binding。
+- 模块依赖形成循环。
+
+典型修复是确认目标模块导出的公开名，再按公开名导入。
+
+<LuxLuaPair title="公开名不等于内部名" luxLabel="目标模块 Lux" luaLabel="使用方 Lux">
+
+```lux
+local player_inventory = {}
+
+export { p_inv = player_inventory }
+```
+
+```lux
+import { p_inv as inventory } from "../inventory"
+```
+
+</LuxLuaPair>
+
+如果目标模块只导出了 `p_inv`，使用方不能导入 `player_inventory`。
+
+## part 顺序错误
+
+part 顺序诊断使用 `PARTxxx`。常见原因：
+
+- 多 part 模块没有入口 part。
+- 多 part 模块有多个入口 part。
+- `part order` 不在入口 part。
+- `part order` 目标不存在或重复。
+- 短名目标有歧义。
+- `part before` / `part after` 形成循环。
+
+推荐修复方式是在入口 part 写完整顺序。
+
+<LuxLuaPair title="part order 修复" luxLabel="Lux" luaLabel="生成效果">
+
+```lux
+part order { "module", "sh_items", "sv_store", "cl_panel" }
+```
+
+```text
+part order 不生成运行时代码。
+它只决定模块内部 part 初始化和合并顺序。
+```
+
+</LuxLuaPair>
+
+不要用大量 `part before` / `part after` 模拟完整编排。
+
+## 运行域错误
+
+运行域错误使用 `REALMxxx`。
+
+```text
+error[REALM001]: symbol `grantItem` is not available in shared context
+```
+
+修复方式之一是把使用点放进明确运行域。
+
+<LuxLuaPair title="使用点进入 server block" luxLabel="Lux" luaLabel="检查结果">
+
+```lux
+shared fn install(player, item) {
+  server {
+    grantItem(player, item)
+  }
+}
+```
+
+```text
+ok：`grantItem` 只在 server block 内使用。
+客户端产物不会包含这个调用。
+```
+
+</LuxLuaPair>
+
+另一个方式是标记整个函数。
+
+<LuxLuaPair title="标记整个函数运行域" luxLabel="Lux" luaLabel="检查结果">
+
+```lux
+server fn install(player, item) {
+  grantItem(player, item)
+}
+```
+
+```text
+ok：`install` 本身是 server-only，
+函数体按 server 上下文检查。
+```
+
+</LuxLuaPair>
+
+`REALM_UNKNOWN` 是 warning，表示外部符号未知。
+
+```text
+warning[REALM_UNKNOWN]:
+cannot verify realm availability of external symbol `ThirdPartyAddon`
+```
+
+用 `extern` 或 `lux.toml` 修复。
+
+<LuxLuaPair title="extern 修复未知外部符号" luxLabel="Lux" luaLabel="配置写法">
+
+```lux
+extern server ThirdPartyAddon
+```
+
+```toml
+[target.gmod.extern]
+ThirdPartyAddon = "server"
+```
+
+</LuxLuaPair>
+
+## 匹配错误
+
+`MATCHxxx` 用于枚举和 `match`：
+
+- 非穷尽匹配。
+- 分支被前面分支覆盖。
+- fallback 分支已经不可达。
+
+<LuxLuaPair title="非穷尽 match" luxLabel="Lux" luaLabel="诊断/修复">
+
+```lux
+fn label(kind) =
+  match kind {
+    FillKind.Solid => "solid"
+  }
+```
+
+```text
+error[MATCH_NON_EXHAUSTIVE]:
+match over enum `FillKind` does not cover `FillKind.Linear`
+
+修复：补齐 Linear 分支，或写明确 `_` fallback。
+```
+
+</LuxLuaPair>
+
+## Lint 诊断
+
+Lint 代码当前包括：
+
+```text
+LINT001  可疑的尾表调用或换行调用形状
+LINT002  尾表达式被分号压制，可能不是预期
+LINT003  可疑自赋值
+LINT004  GMod 回调可能隐式返回副作用表达式
+```
+
+局部关闭应贴近触发点，不要在文件顶部大范围压制。
+
+<LuxLuaPair title="局部关闭 lint" luxLabel="Lux" luaLabel="检查含义">
+
+```lux
+fn PANEL:Paint(w, h) {
+  -- lux-lint: allow LINT004
+  drawBody(self, w, h)
+}
+```
+
+```text
+只允许这一处 `PANEL:Paint` 的 LINT004。
+其他位置仍然正常报告。
+```
+
+</LuxLuaPair>
+
+## 宏和宿主变换错误
+
+宏错误使用 `MACROxxx`，编译期加载错误使用 `CTLOAD001`。常见原因：
+
+- 宏调用参数数量不对。
+- 语句宏用在表达式位置。
+- 宏返回了非 AST 值。
+- 编译期包导出 host transform，但没有声明 `export host package`。
+- 宿主变换生成了无效 IR。
+
+宏作者应使用 `@lux/compile/macro` 和 `@lux/compile/host` 的 helper 报错，不要拼接
+原始 Lua 字符串。
+
+## 排错顺序
+
+1. 先修 `PARSExxx`。
+2. 再修模块导入导出和 part 顺序。
+3. 再修运行域错误。
+4. 最后处理 lint 和未知外部 warning。
+
+GMod 运行时报错时，用 `map-error` 从生成 Lua 行号查回 Lux 源码，再回到对应页面判断
+是语言问题、运行域问题还是普通 GLua 运行时问题。

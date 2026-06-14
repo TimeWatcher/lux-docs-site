@@ -1,0 +1,202 @@
+---
+title: Generated Loader
+description: Generated GMod loaders, bundle-specific names, AddCSLuaFile batching, module factories, private registries, and load order.
+---
+
+# Generated Loader
+
+Lux replaces hand-written GMod loader code with generated loader artifacts. The
+goal is to remove repeated `if SERVER then AddCSLuaFile(...) end` boilerplate
+and make load order a compiler-owned property.
+
+<LuxLuaPair title="Hand-written loader is replaced by generated loader" luxLabel="Old GLua" luaLabel="Lux generated Lua">
+
+```lua
+if SERVER then AddCSLuaFile("cl_hud.lua") end
+if SERVER then AddCSLuaFile("cl_menu.lua") end
+include("sh_items.lua")
+if SERVER then include("sv_store.lua") end
+if CLIENT then include("cl_hud.lua") end
+```
+
+```lua
+-- lua/autorun/lux_my_addon_init.lua
+local __lux_files_client = {
+  "lua/lux/client/my_addon/hud.lua",
+  "lua/lux/client/my_addon/menu.lua",
+}
+
+if SERVER then
+  for i = 1, #__lux_files_client do
+    AddCSLuaFile(__lux_files_client[i])
+  end
+end
+
+include("lua/lux/shared/my_addon/items.lua")
+if SERVER then include("lua/lux/server/my_addon/store.lua") end
+if CLIENT then include("lua/lux/client/my_addon/hud.lua") end
+```
+
+</LuxLuaPair>
+
+Generated files are still ordinary Lua, but developers should treat them as
+build output.
+
+## Loader Files
+
+Loader filenames include the project bundle id:
+
+```text
+lua/autorun/lux_my_addon_init.lua
+lua/autorun/client/lux_my_addon_client_init.lua
+```
+
+The bundle id matters because GMod mounts all addons under one `lua/` namespace.
+Generic names such as `lux_init.lua` can collide and overwrite each other across
+addons.
+
+## `AddCSLuaFile` Batching
+
+The generator batches client-send files instead of repeating the same `if
+SERVER` guard on every line.
+
+<LuxLuaPair title="AddCSLuaFile batching" luxLabel="Old generated shape" luaLabel="Current generated shape">
+
+```lua
+if SERVER then AddCSLuaFile("lua/lux/client/runtime/lux/std.lua") end
+if SERVER then AddCSLuaFile("lua/lux/client/my_addon/hud.lua") end
+if SERVER then AddCSLuaFile("lua/lux/client/my_addon/ui.lua") end
+```
+
+```lua
+local __lux_client_files = {
+  "lua/lux/client/runtime/lux/std.lua",
+  "lua/lux/client/my_addon/hud.lua",
+  "lua/lux/client/my_addon/ui.lua",
+}
+
+if SERVER then
+  for i = 1, #__lux_client_files do
+    AddCSLuaFile(__lux_client_files[i])
+  end
+end
+```
+
+</LuxLuaPair>
+
+This keeps generated loaders readable even when a project has many client
+artifacts.
+
+## Module Factories
+
+Modules are emitted as factories. The loader provides `__lux_import`; modules
+return their export table.
+
+<LuxLuaPair title="Module factory" luxLabel="Lux module meaning" luaLabel="Generated Lua">
+
+```lua
+-- conceptual module output
+local secret = 1
+export { secret as value }
+```
+
+```lua
+return function(__lux_import)
+  local __lux_exports = {}
+
+  local secret = 1
+  __lux_exports.value = secret
+
+  return __lux_exports
+end
+```
+
+</LuxLuaPair>
+
+The global environment does not get a public Lux import function. Import stays
+inside generated loader scope.
+
+## Private Registry
+
+The loader stores module exports in a bundle-private registry.
+
+<LuxLuaPair title="Private registry" luxLabel="Explanation" luaLabel="Generated Lua">
+
+```lua
+-- Each bundle owns its generated module table.
+-- Other addons do not share it accidentally.
+```
+
+```lua
+local __lux_modules = {}
+
+local function __lux_import(id)
+  local module = __lux_modules[id]
+  if module == nil then
+    error("Lux module not loaded: " .. tostring(id), 2)
+  end
+  return module
+end
+```
+
+</LuxLuaPair>
+
+Using a local registry avoids cross-addon collisions while keeping generated Lua
+simple.
+
+## Registering Modules
+
+Each emitted module file returns a factory. The loader calls it once and stores
+the exports.
+
+<LuxLuaPair title="Register module" luxLabel="Explanation" luaLabel="Generated Lua">
+
+```lua
+-- load generated module file
+-- call the returned factory
+-- store exports by canonical module id
+```
+
+```lua
+local __lux_factory = include("lua/lux/shared/my_addon/items.lua")
+__lux_modules["my_addon/items"] = __lux_factory(__lux_import)
+```
+
+</LuxLuaPair>
+
+Import order is therefore deterministic: dependencies are registered before
+modules that import them.
+
+## Load Order
+
+Lux computes load order from:
+
+- package dependency graph;
+- module import graph;
+- realm artifacts;
+- module entry part order;
+- local `before` and `after` part constraints.
+
+Developers should not encode load order through artificial `00_`, `10_`, or
+`20_` file prefixes. Use `part order` in the entry part when initialization
+order matters.
+
+## Do Not Edit Generated Files
+
+Generated files are marked clearly.
+
+<LuxLuaPair title="Generated file marker" luxLabel="Explanation" luaLabel="Generated Lua">
+
+```lua
+-- Generated files may be deleted and regenerated.
+-- Put fixes in Lux source, not in generated Lua.
+```
+
+```lua
+-- Generated by luxc. Do not edit by hand.
+```
+
+</LuxLuaPair>
+
+If generated Lua looks wrong, the fix belongs in source lowering, module graph
+resolution, or loader generation.

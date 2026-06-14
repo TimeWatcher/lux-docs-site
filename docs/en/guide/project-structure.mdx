@@ -1,0 +1,196 @@
+---
+title: Project Structure
+description: Source roots, packages, module entries, part ordering, realm inference, generated roots, and manifests.
+---
+
+# Project Structure
+
+Lux tries to express structure in source paths and module directories first.
+The manifest exists for project-level choices, not for manually listing every
+file.
+
+## Recommended Layout
+
+```text
+my_addon/
+  lux.toml
+  src/
+    inventory/
+      module.lux
+      sh_items.lux
+      sv_store.lux
+      cl_panel.lux
+    hud/
+      cl_module.lux
+      cl_paint.lux
+  packages/
+    my/gameplay/
+      src/module.lux
+  generated/
+    lua/...
+```
+
+`source_root` points at `src`. `generated_root` is where Lux writes GLua
+artifacts. Keeping generated output separate from source makes it safe to clean
+and review.
+
+## Manifest
+
+```toml
+[gmod]
+package_id = "my_addon"
+bundle_id = "my_addon"
+source_root = "src"
+addon_root = "."
+generated_root = "generated"
+package_roots = "packages, vendor/lux-packages"
+source_comments = "readable"
+```
+
+`source_root` and `addon_root` are required for manifest builds.
+`generated_root` defaults to `addon_root`. `bundle_id` controls generated loader
+and registry names; set it when emitted paths must remain stable across
+machines.
+
+`package_roots` is optional. Project package roots are loaded in addition to
+compiler-shipped packages, and duplicate package ids are rejected.
+
+## Module Discovery
+
+Each immediate module directory under `source_root` becomes a Lux module. A
+module may contain several part files:
+
+```text
+src/inventory/module.lux      -> module inventory, shared entry part
+src/inventory/sv_store.lux    -> module inventory, server part
+src/inventory/cl_panel.lux    -> module inventory, client part
+src/inventory/sh_items.lux    -> module inventory, shared part
+```
+
+Nested directories can express submodules:
+
+```text
+src/mgfx/widgets/module.lux   -> module mgfx/widgets
+src/mgfx/text/module.lux      -> module mgfx/text
+```
+
+A module is not a file. It is the set of all part files under the module
+directory.
+
+## Module Entries
+
+A multi-file module must have exactly one entry part:
+
+```text
+module.lux
+cl_module.lux
+sv_module.lux
+sh_module.lux
+```
+
+The entry is where module-level metadata belongs. It is also the file a
+developer should open first when trying to understand the module.
+
+Single-file modules do not need an entry file. A multi-file module with no
+entry is a compile error.
+
+## Part Order
+
+Complete part ordering belongs in the entry part.
+
+<LuxLuaPair title="Complete part order" luxLabel="Lux" luaLabel="Generated effect">
+
+```lux
+part order {
+  "module",
+  "sh_items",
+  "sv_store",
+  "cl_panel",
+}
+```
+
+```lua
+-- part order emits no runtime Lua.
+-- It gives the compiler deterministic part initialization order.
+```
+
+</LuxLuaPair>
+
+Local constraints are useful when a part only cares about nearby order.
+
+<LuxLuaPair title="Local part constraints" luxLabel="Lux" luaLabel="Generated effect">
+
+```lux
+part after "sh_items"
+part before "cl_install"
+```
+
+```lua
+-- before/after constraints emit no runtime Lua.
+-- The compiler reports cycles, missing targets, and ambiguous short names.
+```
+
+</LuxLuaPair>
+
+Use a complete `part order` when you need full choreography. `before` and
+`after` are auxiliary constraints, not a pleasant way to encode an entire
+module.
+
+## Realm Inference
+
+Lux understands both GMod-style prefixes and directory conventions:
+
+```text
+cl_*.lux        client
+sv_*.lux        server
+sh_*.lux        shared
+client/**/*.lux client
+server/**/*.lux server
+shared/**/*.lux shared
+```
+
+If a prefix conflicts with the nearest realm directory, compilation fails.
+Unmarked files default to shared.
+
+## Generated Root
+
+Generated files live under `generated_root`:
+
+```text
+generated/
+  lua/
+    autorun/
+      lux_my_addon_init.lua
+    lux/
+      client/
+      server/
+      shared/
+```
+
+Generated loader names include the bundle id. Do not use generic names such as
+`lux_init.lua`; GMod mounts every addon under one `lua/` namespace, so generic
+loader names can collide across addons.
+
+Generated roots should be treated as build output. Do not edit generated files
+by hand.
+
+## Package Roots
+
+Package roots let projects vendor or share Lux packages:
+
+```toml
+[gmod]
+package_roots = "packages, vendor/lux-packages"
+```
+
+Example:
+
+```text
+packages/
+  acme/ui/
+    lux.toml
+    src/module.lux
+```
+
+Package ids are resolved from their manifests. The same package id may not
+appear twice across compiler-shipped packages and project package roots.

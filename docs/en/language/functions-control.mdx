@@ -1,0 +1,773 @@
+---
+title: Functions and Control Flow
+description: fn declarations, defaults, methods, guards, arrows, optional access, destructuring, table spread, pipelines, do expressions, template strings, and Lua return rules.
+---
+
+# Functions and Control Flow
+
+Lux keeps Lua's imperative execution model, but removes the ceremony that makes
+large GLua files hard to scan. The compiler lowers the extra syntax into direct
+Lua 5.1 shapes, so the runtime remains predictable.
+
+This page focuses on syntax that changes statement and expression flow.
+
+## `fn` Functions
+
+A `fn` declaration creates a local function binding. If the body is a single
+expression, Lux returns that expression.
+
+<LuxLuaPair title="Single-expression function" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+fn clamp01(value) value < 0 ? 0 : value > 1 ? 1 : value
+```
+
+```lua
+local function clamp01(value)
+  return value < 0 and 0 or value > 1 and 1 or value
+end
+```
+
+</LuxLuaPair>
+
+Block functions may also end with a tail expression. The tail expression becomes
+the return value unless it is suppressed with a semicolon.
+
+<LuxLuaPair title="Block function with implicit return" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+fn tierForExp(exp) {
+  stopif exp == nil, "guest"
+  stopif exp < 25, "regular"
+  "veteran"
+}
+```
+
+```lua
+local function tierForExp(exp)
+  if exp == nil then
+    return "guest"
+  end
+  if exp < 25 then
+    return "regular"
+  end
+  return "veteran"
+end
+```
+
+</LuxLuaPair>
+
+Top-level function declarations are hoisted across the whole module. That means
+module parts can call each other's top-level functions without depending on
+part order.
+
+<LuxLuaPair title="Top-level function hoisting" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+fn renderLabel(player) formatName(player)
+
+fn formatName(player) {
+  player:Nick()
+}
+```
+
+```lua
+local renderLabel
+local formatName
+
+function renderLabel(player)
+  return formatName(player)
+end
+
+function formatName(player)
+  return player:Nick()
+end
+```
+
+</LuxLuaPair>
+
+Only simple top-level `fn` bindings are hoisted. Top-level non-function locals
+are initialized in part order and cannot be used before initialization.
+
+## Default Parameters
+
+Default parameters are applied only when the argument is `nil`. This matches
+Lua conventions and avoids treating `false` as missing.
+
+<LuxLuaPair title="Defaults are nil-only" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+fn alpha(color, amount = 255) {
+  Color(color.r, color.g, color.b, amount)
+}
+```
+
+```lua
+local function alpha(color, amount)
+  if amount == nil then
+    amount = 255
+  end
+
+  return Color(color.r, color.g, color.b, amount)
+end
+```
+
+</LuxLuaPair>
+
+Defaults are evaluated from left to right, so later defaults may depend on
+earlier parameters after their defaults have been applied.
+
+<LuxLuaPair title="Defaults evaluate in parameter order" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+fn rect(x = 0, y = x, w = 100, h = w) {
+  { x = x, y = y, w = w, h = h }
+}
+```
+
+```lua
+local function rect(x, y, w, h)
+  if x == nil then
+    x = 0
+  end
+  if y == nil then
+    y = x
+  end
+  if w == nil then
+    w = 100
+  end
+  if h == nil then
+    h = w
+  end
+
+  return { x = x, y = y, w = w, h = h }
+end
+```
+
+</LuxLuaPair>
+
+## GLua Method Declarations
+
+Lux keeps Lua's colon method semantics. A colon method receives `self` exactly
+as Lua would.
+
+<LuxLuaPair title="Colon method" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+fn PANEL:Paint(w, h) {
+  self:DrawBackground(w, h)
+}
+```
+
+```lua
+function PANEL:Paint(w, h)
+  self:DrawBackground(w, h)
+end
+```
+
+</LuxLuaPair>
+
+When you need a function field without implicit `self`, use a dot path.
+
+<LuxLuaPair title="Dot function field" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+fn API.draw(panel, w, h) {
+  panel:PaintManual()
+}
+```
+
+```lua
+function API.draw(panel, w, h)
+  panel:PaintManual()
+end
+```
+
+</LuxLuaPair>
+
+Exported declarations must create module-scope bindings. Method path
+declarations are not exportable as module bindings; wrap them in a named
+function when you need public API.
+
+## Implicit Return and Semicolons
+
+The final expression in a block is returned. This is intentionally limited to
+tail position; Lux does not turn every expression statement into a return.
+
+<LuxLuaPair title="Tail expression return" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+fn describe(value) {
+  local kind = type(value)
+  `value is ${kind}`
+}
+```
+
+```lua
+local function describe(value)
+  local kind = type(value)
+  return "value is " .. tostring(kind)
+end
+```
+
+</LuxLuaPair>
+
+Add a semicolon when the final expression is meant only for side effects.
+
+<LuxLuaPair title="Semicolon suppresses implicit return" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+fn paint(panel, w, h) {
+  draw.RoundedBox(8, 0, 0, w, h, Color(20, 20, 20));
+}
+```
+
+```lua
+local function paint(panel, w, h)
+  draw.RoundedBox(8, 0, 0, w, h, Color(20, 20, 20))
+end
+```
+
+</LuxLuaPair>
+
+Use explicit `return` when you need Lua's multiple-return forwarding.
+
+<LuxLuaPair title="Explicit return preserves multiple results" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+fn readPair() {
+  return next(cache)
+}
+```
+
+```lua
+local function readPair()
+  return next(cache)
+end
+```
+
+</LuxLuaPair>
+
+## Conditional Expressions
+
+`if` can be used as an expression. It lowers to a temporary and ordinary Lua
+branching, so each branch runs only when selected.
+
+<LuxLuaPair title="if as an expression" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+local label = if ply:IsAdmin() {
+  "admin"
+} else {
+  "player"
+}
+```
+
+```lua
+local label
+if ply:IsAdmin() then
+  label = "admin"
+else
+  label = "player"
+end
+```
+
+</LuxLuaPair>
+
+The short conditional expression is useful in compact value positions. Parenthesize
+nested forms when readability would otherwise suffer.
+
+<LuxLuaPair title="Short conditional expression" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+local color = health <= 0 ? deadColor : health < 25 ? dangerColor : okColor
+```
+
+```lua
+local color = health <= 0 and deadColor or health < 25 and dangerColor or okColor
+```
+
+</LuxLuaPair>
+
+## Guard Statements
+
+`stopif` returns early when a condition is true. It is meant for validation and
+early exits at the top of functions or loops.
+
+<LuxLuaPair title="Basic stopif" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+fn displayName(ply) {
+  stopif not IsValid(ply), "<invalid>"
+  ply:Nick()
+}
+```
+
+```lua
+local function displayName(ply)
+  if not IsValid(ply) then
+    return "<invalid>"
+  end
+  return ply:Nick()
+end
+```
+
+</LuxLuaPair>
+
+`stopifn` is the inverted form: stop when the expression is falsey.
+
+<LuxLuaPair title="stopif and stopifn" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+fn requireInventory(ply) {
+  stopif not IsValid(ply), nil
+  stopifn ply.inventory, nil
+  ply.inventory
+}
+```
+
+```lua
+local function requireInventory(ply)
+  if not IsValid(ply) then
+    return nil
+  end
+  if not ply.inventory then
+    return nil
+  end
+  return ply.inventory
+end
+```
+
+</LuxLuaPair>
+
+Inside loops, `stopif` may target `break` or `continue`.
+
+<LuxLuaPair title="Loop guards" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+for _, ply in ipairs(player.GetAll()) {
+  stopif not IsValid(ply), continue
+  stopif ply:IsBot(), continue
+  sendHudUpdate(ply)
+}
+```
+
+```lua
+for _, ply in ipairs(player.GetAll()) do
+  repeat
+    if not IsValid(ply) then
+      break
+    end
+    if ply:IsBot() then
+      break
+    end
+    sendHudUpdate(ply)
+  until true
+end
+```
+
+</LuxLuaPair>
+
+The exact `continue` lowering depends on the surrounding loop shape, but the
+observable behavior is the same: skip the rest of the current iteration.
+
+## Arrow Functions
+
+Arrow functions are expression-friendly anonymous functions. They are useful
+with array helpers, hooks, and small callbacks.
+
+<LuxLuaPair title="Plain arrow function" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+local names = arr.map(players, (ply) => ply:Nick())
+```
+
+```lua
+local names = arr.map(players, function(ply)
+  return ply:Nick()
+end)
+```
+
+</LuxLuaPair>
+
+Use `self =>` when the generated function should receive an explicit `self`
+parameter.
+
+<LuxLuaPair title="Implicit self arrow" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+button.DoClick = self => openPanel(self.owner)
+```
+
+```lua
+button.DoClick = function(self)
+  return openPanel(self.owner)
+end
+```
+
+</LuxLuaPair>
+
+For long callbacks, prefer a named `fn`; diagnostics and stack traces are easier
+to read.
+
+## Optional Access
+
+Optional access stops evaluating the chain when the left side is `nil`. Lux
+lowers it through temporaries so complex receivers are evaluated once.
+
+<LuxLuaPair title="Safe colon call" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+local nick = ply?.GetActiveWeapon?.():GetPrintName()
+```
+
+```lua
+local __lux_opt_1 = ply
+local __lux_opt_2 = __lux_opt_1 ~= nil and __lux_opt_1.GetActiveWeapon
+local __lux_opt_3 = __lux_opt_2 ~= nil and __lux_opt_1:GetActiveWeapon()
+local nick = __lux_opt_3 ~= nil and __lux_opt_3:GetPrintName() or nil
+```
+
+</LuxLuaPair>
+
+Indexes and call arguments after a failed optional step are not evaluated.
+
+<LuxLuaPair title="Safe index delays evaluation" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+local item = inventory?.items?[expensiveSlot()]
+```
+
+```lua
+local __lux_opt_1 = inventory
+local __lux_opt_2 = __lux_opt_1 ~= nil and __lux_opt_1.items or nil
+local item
+if __lux_opt_2 ~= nil then
+  item = __lux_opt_2[expensiveSlot()]
+else
+  item = nil
+end
+```
+
+</LuxLuaPair>
+
+Optional access only protects the steps marked with `?.` or `?[]`. Ordinary
+access after the optional result behaves like ordinary Lua.
+
+## `??` Nil Coalescing
+
+`??` selects the right side only when the left side is `nil`. Unlike `or`, it
+preserves `false`.
+
+<LuxLuaPair title="nil coalescing is not or" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+local enabled = config.enabled ?? true
+```
+
+```lua
+local __lux_coalesce_1 = config.enabled
+local enabled
+if __lux_coalesce_1 ~= nil then
+  enabled = __lux_coalesce_1
+else
+  enabled = true
+end
+```
+
+</LuxLuaPair>
+
+When mixing `??` with comparisons, group the expression you mean. The compiler
+keeps the precedence explicit rather than guessing.
+
+<LuxLuaPair title="Group ?? with comparisons" luxLabel="Lux" luaLabel="Generated Lua shape">
+
+```lux
+local visible = (settings.alpha ?? 255) > 0
+```
+
+```lua
+local __lux_coalesce_1 = settings.alpha
+local __lux_value_1
+if __lux_coalesce_1 ~= nil then
+  __lux_value_1 = __lux_coalesce_1
+else
+  __lux_value_1 = 255
+end
+local visible = __lux_value_1 > 0
+```
+
+</LuxLuaPair>
+
+Optional chains compose naturally with `??`.
+
+<LuxLuaPair title="Optional chain in a relational expression" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+local isLoaded = (weapon?.Clip1() ?? 0) > 0
+```
+
+```lua
+local __lux_opt_1 = weapon
+local __lux_opt_2 = __lux_opt_1 ~= nil and __lux_opt_1:Clip1() or nil
+local __lux_value_1
+if __lux_opt_2 ~= nil then
+  __lux_value_1 = __lux_opt_2
+else
+  __lux_value_1 = 0
+end
+local isLoaded = __lux_value_1 > 0
+```
+
+</LuxLuaPair>
+
+## Destructuring Bindings
+
+Object destructuring reads named fields into locals.
+
+<LuxLuaPair title="Object destructuring" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+local { x, y, width = w, height = h } = rect
+```
+
+```lua
+local x = rect.x
+local y = rect.y
+local w = rect.width
+local h = rect.height
+```
+
+</LuxLuaPair>
+
+Array destructuring reads one-based positions, matching Lua arrays.
+
+<LuxLuaPair title="Array destructuring" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+local [first, second] = values
+```
+
+```lua
+local first = values[1]
+local second = values[2]
+```
+
+</LuxLuaPair>
+
+Destructuring does not automatically protect against nil receivers. Use `??`
+or a guard when the source may be absent.
+
+<LuxLuaPair title="Fallback before destructuring" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+local { title = name } = item ?? {}
+```
+
+```lua
+local __lux_coalesce_1 = item
+local __lux_value_1
+if __lux_coalesce_1 ~= nil then
+  __lux_value_1 = __lux_coalesce_1
+else
+  __lux_value_1 = {}
+end
+local name = __lux_value_1.title
+```
+
+</LuxLuaPair>
+
+## Table Spread
+
+Table spread copies fields from source tables into a new literal. Later entries
+overwrite earlier entries.
+
+<LuxLuaPair title="Table spread overwrites in order" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+local style = {
+  ...baseStyle,
+  color = Color(255, 255, 255),
+  ...stateStyle,
+}
+```
+
+```lua
+local style = {}
+for __lux_k, __lux_v in pairs(baseStyle) do
+  style[__lux_k] = __lux_v
+end
+style.color = Color(255, 255, 255)
+for __lux_k, __lux_v in pairs(stateStyle) do
+  style[__lux_k] = __lux_v
+end
+```
+
+</LuxLuaPair>
+
+Lux does not deep-clone nested tables. If a nested table must be independent,
+clone it explicitly with a helper.
+
+## Compound Assignment
+
+Compound assignment is syntax for reading, computing, and writing the same
+place.
+
+<LuxLuaPair title="Simple compound assignment" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+count += 1
+label ..= "!"
+```
+
+```lua
+count = count + 1
+label = label .. "!"
+```
+
+</LuxLuaPair>
+
+Complex left-hand sides are evaluated once. This matters for expressions with
+function calls or metamethod-heavy indexing.
+
+<LuxLuaPair title="Complex left-hand side evaluates once" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+inventory:getSlot(slot).count += amount
+```
+
+```lua
+local __lux_target_1 = inventory:getSlot(slot)
+__lux_target_1.count = __lux_target_1.count + amount
+```
+
+</LuxLuaPair>
+
+## Pipelines
+
+The pipeline operator passes the left value into an explicit `_` placeholder in
+the right expression.
+
+<LuxLuaPair title="Explicit-placeholder pipeline" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+local label = player
+  |> _.GetActiveWeapon(_)
+  |> formatWeapon(_)
+  |> string.upper(_)
+```
+
+```lua
+local __lux_pipe_1 = player
+__lux_pipe_1 = __lux_pipe_1.GetActiveWeapon(__lux_pipe_1)
+__lux_pipe_1 = formatWeapon(__lux_pipe_1)
+local label = string.upper(__lux_pipe_1)
+```
+
+</LuxLuaPair>
+
+The `_` placeholder belongs to the immediate pipeline expression. It does not
+leak into nested function literals.
+
+<LuxLuaPair title="Pipeline placeholder does not enter nested functions" luxLabel="Invalid Lux" luaLabel="Diagnostic">
+
+```lux
+local out = values |> arr.map(_, (x) => x + _)
+```
+
+```text
+error[PIPE_PLACEHOLDER_SCOPE]:
+pipeline placeholder `_` is not visible inside nested function literals
+```
+
+</LuxLuaPair>
+
+If a nested callback needs the piped value, bind it before the callback or pass
+it as an explicit argument.
+
+## `do` Expressions
+
+`do` expressions let you compute a value with local statements while staying in
+expression position.
+
+<LuxLuaPair title="do expression" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+local label = do {
+  local nick = ply:Nick()
+  `[${team.GetName(ply:Team())}] ${nick}`
+}
+```
+
+```lua
+local label
+do
+  local nick = ply:Nick()
+  label = "[" .. tostring(team.GetName(ply:Team())) .. "] " .. tostring(nick)
+end
+```
+
+</LuxLuaPair>
+
+Use `do` when a value needs temporary locals but extracting a named function
+would hide nearby context.
+
+## Template Strings
+
+Template strings concatenate strings and `tostring` conversions.
+
+<LuxLuaPair title="Template string" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+local line = `${ply:Nick()} has ${score} points`
+```
+
+```lua
+local line = tostring(ply:Nick()) .. " has " .. tostring(score) .. " points"
+```
+
+</LuxLuaPair>
+
+Template strings are not format strings. Use `string.format` when you need
+number formatting or padding.
+
+## Multiple Returns and Varargs
+
+Lux preserves Lua's multiple-return rules where they matter: explicit `return`,
+tail calls, and final expression positions.
+
+<LuxLuaPair title="Multiple-return forwarding" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+fn forward(...) {
+  return hook.Run("LuxEvent", ...)
+}
+```
+
+```lua
+local function forward(...)
+  return hook.Run("LuxEvent", ...)
+end
+```
+
+</LuxLuaPair>
+
+Local multiple assignment still follows Lua rules. Only the last expression in
+an expression list can expand to multiple values.
+
+<LuxLuaPair title="Local multi-bindings keep Lua rules" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+local key, value = next(tbl)
+local first, second, fallback = maybeMany(), "fallback"
+```
+
+```lua
+local key, value = next(tbl)
+local first, second, fallback = maybeMany(), "fallback"
+```
+
+</LuxLuaPair>
+
+When generated Lua would need extra temporaries, Lux preserves the same
+observable ordering as the source expression.

@@ -1,0 +1,205 @@
+---
+title: Generated Lua
+description: Readable Lua output, module factories, export tables, source comments, source maps, match lowering, optional access lowering, and local limits.
+---
+
+# Generated Lua
+
+Generated Lua is part of the Lux developer experience. GMod errors happen in
+Lua stack traces, so emitted code must be legal, readable, and source
+correlated.
+
+## Single-file Output
+
+Single-file `compile` output is a direct Lua chunk. It is useful for language
+examples and backend debugging.
+
+<LuxLuaPair title="Single-file output shape" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+fn add(a, b) a + b
+
+print(add(1, 2))
+```
+
+```lua
+local function add(a, b)
+  return a + b
+end
+
+print(add(1, 2))
+```
+
+</LuxLuaPair>
+
+Project builds use module factories instead of a single top-level chunk.
+
+## Module Factories
+
+GMod project modules are emitted as factories. The loader supplies
+`__lux_import`, and the factory returns an export table.
+
+<LuxLuaPair title="GMod module factory" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+fn helper(x) {
+  x + 1
+}
+
+export { publicApi = helper }
+```
+
+```lua
+return function(__lux_import)
+  local __lux_exports = {}
+
+  local function helper(x)
+    return x + 1
+  end
+
+  __lux_exports.publicApi = helper
+  return __lux_exports
+end
+```
+
+</LuxLuaPair>
+
+Modules do not expose a global import function. Import stays inside the
+generated loader and module factories.
+
+## Export Tables
+
+Exports map public names to internal bindings.
+
+<LuxLuaPair title="Export alias" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+local player_inventory = {}
+
+export { p_inv = player_inventory }
+```
+
+```lua
+local player_inventory = {}
+
+__lux_exports.p_inv = player_inventory
+```
+
+</LuxLuaPair>
+
+The internal name remains private. Other modules can import `p_inv`, not
+`player_inventory`.
+
+## Source Comment Modes
+
+```powershell
+cargo run -- compile examples\features.lux --source-comments none
+cargo run -- compile examples\features.lux --source-comments readable
+cargo run -- compile examples\features.lux --source-comments boundary
+cargo run -- compile examples\features.lux --source-comments dense
+```
+
+- `none`: production-friendly output with sidecar maps only.
+- `readable`: comments at review anchors such as functions and branch blocks.
+- `boundary`: comments whenever the mapped source line changes.
+- `dense`: comments for every mapped generated line.
+
+Use `readable` while inspecting generated Lua. Use `none` when generated files
+should be smaller and source maps are available.
+
+## Source Maps
+
+Source maps connect generated Lua positions back to Lux source. They are used by
+`luxc map-error`:
+
+```powershell
+cargo run -- map-error generated\hud.lua.map.json 42:9
+```
+
+Expected output shape:
+
+```text
+generated/lua/lux/client/my_addon/hud.lua:42:9
+  -> src/hud/cl_paint.lux:18:3
+```
+
+Macro expansions and host transforms carry expansion spans so diagnostics can
+distinguish user call sites from macro implementation code.
+
+## `match` Lowering
+
+Value-position `match` lowers to a temporary and branches. Lux avoids wrapping
+ordinary matches in closures.
+
+<LuxLuaPair title="match in value position" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+local mode = match kind {
+  FillKind.Solid => "solid"
+  FillKind.Linear => "linear"
+}
+```
+
+```lua
+local mode
+local __lux_match_1 = kind
+
+if __lux_match_1 == 0 then
+  mode = "solid"
+elseif __lux_match_1 == 1 then
+  mode = "linear"
+end
+```
+
+</LuxLuaPair>
+
+Return position can emit direct returns when that preserves evaluation order.
+
+## Optional Access Lowering
+
+Optional access lowers to temporaries so receivers and indexes are evaluated
+only when needed.
+
+<LuxLuaPair title="Optional access and nil coalescing" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+local ammo = weapon?.Clip1() ?? 0
+```
+
+```lua
+local __lux_opt_1 = weapon
+local __lux_opt_2
+if __lux_opt_1 ~= nil then
+  __lux_opt_2 = __lux_opt_1:Clip1()
+else
+  __lux_opt_2 = nil
+end
+
+local ammo
+if __lux_opt_2 ~= nil then
+  ammo = __lux_opt_2
+else
+  ammo = 0
+end
+```
+
+</LuxLuaPair>
+
+The emitted shape may be compacted, but it must preserve nil-only coalescing and
+single evaluation of side-effectful expressions.
+
+## Local Limits
+
+Lua 5.1 has a hard local-variable limit per function. Lux must never emit a
+chunk that GMod rejects with "function has more than 200 local variables".
+
+The backend narrows temporary scopes and reports deterministic diagnostics when
+generated code cannot be made legal:
+
+```text
+error[CODEGEN_LOCAL_LIMIT]:
+generated function would exceed Lua 5.1 local variable limit
+```
+
+When this happens, split the function, move repeated expression work into a
+helper, or reduce generated temporary pressure in the source expression.

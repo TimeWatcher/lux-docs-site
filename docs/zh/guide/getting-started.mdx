@@ -1,0 +1,246 @@
+---
+title: 快速开始
+description: 从源码构建 luxc，创建最小 GMod 项目，编译并定位生成文件。
+---
+
+# 快速开始
+
+Lux 是面向 GLua 的离线编译语言。你在项目里写 `.lux` 文件，`luxc` 在游戏外完成
+解析、宏展开、模块解析、运行域检查和 Lua 生成。进入 GMod 的仍然是普通 Lua 5.1 /
+GLua 文件，因此不需要游戏内解析器。
+
+本页假设你正在本仓库中开发 Lux。如果以后发布独立二进制，下面所有
+`cargo run -- ...` 都可以替换成 `luxc ...`。
+
+## 环境要求
+
+- Rust toolchain：用于构建当前 Rust 版 `luxc`。
+- Garry's Mod：只有构建、运行插件时需要。
+- 可选的 `gmad.exe`：只有打包 `.gma` 时需要。
+
+先确认编译器能构建并通过测试：
+
+```powershell
+cd C:\Development\gmod\lux\compiler
+cargo test --quiet
+```
+
+## 编译单个文件
+
+仓库里的 `examples/features.lux` 覆盖了大部分语言特性，可以先用它确认编译器输出：
+
+```powershell
+cd C:\Development\gmod\lux\compiler
+cargo run -- compile ..\examples\features.lux --source-comments readable
+```
+
+`compile` 会把生成的 Lua 打印到标准输出。需要源码映射时加 `--map`：
+
+```powershell
+cargo run -- compile ..\examples\features.lux `
+  --map ..\examples\features.lua.map.json `
+  --source-comments boundary
+```
+
+`--source-comments` 控制生成 Lua 里的源码注释：
+
+```text
+none      不写源码注释
+readable  适合直接阅读
+boundary  只标注关键边界
+dense     尽量密集地标注
+```
+
+## 写第一个模块
+
+创建一个目录模块。目录里的所有 part 文件共同组成一个 Lux 模块，顶层声明默认只在
+模块内部可见。
+
+```text
+src/
+  inventory/
+    module.lux
+    sh_items.lux
+    sv_store.lux
+    cl_panel.lux
+```
+
+`module.lux` 是入口 part，适合放导出、初始化顺序和少量共享声明。
+
+<LuxLuaPair title="入口 part" luxLabel="Lux: module.lux" luaLabel="生成 Lua 形态">
+
+```lux
+part order { "module", "sh_items", "sv_store", "cl_panel" }
+
+local items = {}
+
+fn formatItem(item) =
+  item?.name ?? "Unknown"
+
+export { formatItem }
+```
+
+```lua
+local items = {}
+
+local function formatItem(item)
+  local __value = nil
+  if item ~= nil then
+    __value = item.name
+  end
+  if __value == nil then
+    __value = "Unknown"
+  end
+
+  return __value
+end
+
+__lux_exports.formatItem = formatItem
+```
+
+</LuxLuaPair>
+
+`sv_store.lux` 里的声明默认属于服务端运行域。
+
+<LuxLuaPair title="服务端 part" luxLabel="Lux: sv_store.lux" luaLabel="server artifact">
+
+```lux
+server fn grantItem(player, item) {
+  items[player:SteamID64()] = item
+}
+
+export server { grantItem }
+```
+
+```lua
+local function grantItem(player, item)
+  items[player:SteamID64()] = item
+end
+
+__lux_exports.grantItem = grantItem
+```
+
+</LuxLuaPair>
+
+`cl_panel.lux` 可以直接使用同模块里的私有声明，不需要导入同级 part。
+
+<LuxLuaPair title="客户端 part" luxLabel="Lux: cl_panel.lux" luaLabel="client artifact">
+
+```lux
+client fn drawItem(item) {
+  draw.SimpleText(formatItem(item), "DermaDefault", 0, 0)
+}
+```
+
+```lua
+local function drawItem(item)
+  draw.SimpleText(formatItem(item), "DermaDefault", 0, 0)
+end
+```
+
+</LuxLuaPair>
+
+注意：导入只用于引用其他模块。模块内部的 part 共享同一个模块作用域。
+
+## 创建 GMod 项目
+
+最小项目只需要一个 `lux.toml` 和 `src` 目录：
+
+```text
+my_addon/
+  lux.toml
+  addon.json
+  src/
+    shared/
+      hud.lux
+    server/
+      init.lux
+    client/
+      ui.lux
+```
+
+推荐的 `lux.toml`：
+
+```toml
+[gmod]
+source_root = "src"
+addon_root = "."
+generated_root = "generated"
+source_comments = "boundary"
+bundle_id = "my_addon"
+
+[target.gmod.realm]
+unknown_external = "warn"
+```
+
+字段含义：
+
+- `source_root`：Lux 源码根目录。
+- `addon_root`：GMod 插件根目录，也就是包含 `addon.json` 的目录。
+- `generated_root`：生成文件写入位置。开发时建议先写到独立目录。
+- `source_comments`：生成 Lua 的源码注释密度。
+- `bundle_id`：生成 loader 文件名和私有注册表命名用的稳定标识。
+- `unknown_external`：未知外部符号策略，见 GMod 外部 API 文档。
+
+构建：
+
+```powershell
+cd C:\Development\gmod\lux\compiler
+cargo run -- gmod build --manifest ..\examples\gmod_project\lux.toml
+```
+
+输出会包含：
+
+```text
+generated/
+  lua/
+    autorun/
+      lux_<bundle>_init.lua
+      client/lux_<bundle>_cl_init.lua
+      server/lux_<bundle>_sv_init.lua
+    lux/
+      client/...
+      server/...
+```
+
+开发时可以先用 `--dry-run` 查看构建计划，不写任何文件：
+
+```powershell
+cargo run -- gmod build --manifest path\to\lux.toml --dry-run
+```
+
+确认生成内容后，再把 `generated` 目录里的 `lua` 合并到你的 GMod 插件目录，或把
+`generated_root` 直接指向开发用插件目录。不要把输出指向正在维护的原始源码目录。
+
+## 直接指定路径构建
+
+没有 `lux.toml` 时也可以显式给出源码目录和插件目录：
+
+```powershell
+cargo run -- gmod build path\to\src path\to\addon --generated-root path\to\generated
+```
+
+这种形式适合临时测试；团队项目推荐使用 `lux.toml`，因为外部符号声明、源码注释
+策略、包根目录和稳定 bundle 名称都需要配置。
+
+## 检查和格式化
+
+```powershell
+cargo run -- lint ..\examples\features.lux
+cargo run -- format ..\examples\features.lux --check
+cargo run -- format ..\examples\features.lux --write
+```
+
+`format --check` 只检查，不修改文件。`format --write` 会原子写回，当前格式化器是
+保守实现，会保留 token 文本和注释文本。
+
+## 映射运行时错误
+
+如果 GMod 报的是生成 Lua 的行号，可以用源码映射查回 Lux 源文件：
+
+```powershell
+cargo run -- map-error generated\lua\lux\client\my_addon\hud.lua.map.json 42
+```
+
+这会输出对应的 Lux 文件、行号和列号。调试阶段建议保留 `.lua.map.json` 文件，不要
+只复制 `.lua`。

@@ -1,0 +1,183 @@
+---
+title: 语言概览
+description: Lux 的核心语法、模块系统、运行域、编译期扩展和生成模型。
+---
+
+# 语言概览
+
+Lux 是 Lua 5.1 / GLua 的超集，目标不是把 Lua 改成一门完全不同的语言，而是把
+GMod 项目里最痛的部分交给离线编译器：模块加载、公开 API、客户端/服务端运行域、
+源码映射、宏和宿主变换。
+
+生成结果仍然是普通 Lua。Lux 特性越高级，越应该在生成阶段消失成可调试、可阅读、
+可部署的 GLua。文档里的代码示例默认提供右上角语言切换：先看 Lux 写法，再切到
+“编译后 Lua”确认它会落成什么样。
+
+<div className="lux-stage">
+  <div><strong>解析</strong><span>词法、语法、宏展开</span></div>
+  <div><strong>解析模块</strong><span>导入、导出、模块图</span></div>
+  <div><strong>检查</strong><span>绑定、运行域、外部符号</span></div>
+  <div><strong>生成</strong><span>Lua、loader、源码映射</span></div>
+</div>
+
+## 一段完整示例
+
+<LuxLuaPair title="客户端 HUD 片段">
+
+```lux
+import { arr } from "@lux/std"
+import { color, valid } from "@lux/gmod"
+
+enum Tier repr number {
+  Guest = 0,
+  Regular = 1,
+  Veteran = 2,
+}
+
+fn tierForExp(exp) {
+  stopif exp == nil, Tier.Guest
+  stopif exp < 5, Tier.Guest
+  stopif exp < 25, Tier.Regular
+  Tier.Veteran
+}
+
+client fn drawName(ply, x, y) {
+  stopifn valid.is(ply)
+
+  local name = ply?:Nick() ?? "Unknown"
+  local tier = tierForExp(ply?:GetNWInt("exp") ?? 0)
+  local textColor = tier == Tier.Veteran
+    then color.rgba(255, 220, 120, 255)
+    else color.rgba(255, 255, 255, 255)
+
+  draw.SimpleText(name, "DermaDefault", x, y, textColor)
+}
+
+export client { drawName }
+```
+
+```lua
+local __lux_std = __lux_import("@lux/std")
+local arr = __lux_std.arr
+
+local __lux_gmod = __lux_import("@lux/gmod")
+local color = __lux_gmod.color
+local valid = __lux_gmod.valid
+
+local function tierForExp(exp)
+  if exp == nil then
+    return 0
+  end
+  if exp < 5 then
+    return 0
+  end
+  if exp < 25 then
+    return 1
+  end
+
+  return 2
+end
+
+local function drawName(ply, x, y)
+  if not valid.is(ply) then
+    return
+  end
+
+  local name = nil
+  do
+    local __obj = ply
+    if __obj ~= nil and __obj.Nick ~= nil then
+      name = __obj:Nick()
+    end
+  end
+  if name == nil then
+    name = "Unknown"
+  end
+
+  local __exp = nil
+  do
+    local __obj = ply
+    if __obj ~= nil and __obj.GetNWInt ~= nil then
+      __exp = __obj:GetNWInt("exp")
+    end
+  end
+  if __exp == nil then
+    __exp = 0
+  end
+
+  local tier = tierForExp(__exp)
+  local textColor
+  if tier == 2 then
+    textColor = color.rgba(255, 220, 120, 255)
+  else
+    textColor = color.rgba(255, 255, 255, 255)
+  end
+
+  draw.SimpleText(name, "DermaDefault", x, y, textColor)
+end
+
+__lux_exports.drawName = drawName
+```
+
+</LuxLuaPair>
+
+这段代码展示了 Lux 的几条核心规则：
+
+- `import` 在编译期解析，不依赖运行时 `require`。
+- `fn` 默认创建模块私有绑定，不会自动变成全局变量。
+- `client fn` 明确表示函数只在客户端产物中可用。
+- `?.`、`?:`、`??` 用显式临时值生成安全的 `nil` 处理。
+- `export client { drawName }` 只把客户端 API 暴露给其他模块。
+
+## 核心特性清单
+
+<div className="lux-callout-grid">
+  <div><strong>函数</strong><p>`fn`、默认参数、箭头函数、方法声明、隐式返回。</p></div>
+  <div><strong>控制流</strong><p>花括号块、条件表达式、guard 语句、循环、`do` 表达式。</p></div>
+  <div><strong>数据访问</strong><p>解构、表展开、可选访问、nil 合并、复合赋值。</p></div>
+  <div><strong>模块</strong><p>目录模块、part 文件、模块私有作用域、稳定初始化顺序。</p></div>
+  <div><strong>导入导出</strong><p>命名导入、命名空间导入、副作用导入、显式导出映射。</p></div>
+  <div><strong>运行域</strong><p>由目录、文件前缀、声明和块表达客户端/服务端/共享代码。</p></div>
+  <div><strong>枚举与匹配</strong><p>零运行时标量枚举、已有表布局视图、穷尽检查。</p></div>
+  <div><strong>编译期扩展</strong><p>语法宏、宿主变换、运行时包和编译期包分层。</p></div>
+</div>
+
+## 与 Lua 的关系
+
+Lux 保留这些 Lua/GLua 习惯：
+
+- `local`、赋值、`return`、`break`、`while`、`for`、`repeat`、`do`。
+- 一基数组、表、`pairs` / `ipairs`、多返回值、`...`。
+- 点号函数和冒号方法声明，例如 `fn PANEL:Paint(w, h)`。
+- 直接调用 GMod API，例如 `hook.Add`、`draw.SimpleText`。
+
+Lux 增加的是可静态理解的结构：
+
+- 模块图由导入导出构成。
+- 顶层默认私有，公开 API 必须显式导出。
+- 运行域在源码中表达，而不是靠手写 `if SERVER then` 散落控制。
+- 编译器能生成 GMod loader 和 `AddCSLuaFile`，开发者不维护加载顺序。
+
+## 术语约定
+
+文档中会保留少量 Lux 关键字：
+
+```text
+module  一个由一个或多个 part 文件组成的逻辑模块
+part    模块内部的一个 .lux 文件
+realm   运行域：shared、client、server
+export  从内部绑定到外部公开名称的映射
+host    编译期宿主变换，用于领域语法优化
+```
+
+正文会尽量使用中文术语：模块、part 文件、运行域、导入、导出、编译期包、生成产物。
+代码中的关键字保持原样。
+
+## 阅读顺序
+
+1. [函数和控制流](/zh/language/functions-control)
+2. [模块和 part](/zh/language/modules)
+3. [导入与导出](/zh/language/imports-exports)
+4. [运行域](/zh/language/realms)
+5. [枚举与匹配](/zh/language/enums-match)
+6. [宏与宿主变换](/zh/language/macros-host)

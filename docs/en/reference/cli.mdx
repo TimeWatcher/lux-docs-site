@@ -1,0 +1,179 @@
+---
+title: CLI Reference
+description: luxc commands for lexing, parsing, linting, formatting, compiling, GMod builds, error mapping, and GMA packaging.
+---
+
+# CLI Reference
+
+During compiler development, run commands through Cargo:
+
+```powershell
+cargo run -- <command>
+```
+
+If you already built `luxc`, replace `cargo run --` with the path to the
+binary.
+
+```powershell
+target\debug\luxc.exe <command>
+```
+
+## Command Overview
+
+```text
+luxc lex <path>
+luxc parse <path>
+luxc lint <path>
+luxc format <path> [--check] [--write]
+luxc compile <path> [--map <path>] [--source-comments none|readable|boundary|dense]
+luxc map-error <map.json> <generated-line>
+luxc gmod build <source-root> <addon-root> [--generated-root <path>] [--dry-run]
+luxc gmod build --manifest <lux.toml> [--generated-root <path>] [--dry-run]
+luxc gmod package --manifest <lux.toml> --gmad <path> --out <path> [--run]
+```
+
+All paths are read and written as UTF-8 text.
+
+## `lex`
+
+Print tokens for one file:
+
+```powershell
+cargo run -- lex examples\features.lux
+```
+
+Use this only when debugging parser or lexer behavior. Normal users should not
+need it.
+
+## `parse`
+
+Parse one file and print the syntax tree:
+
+```powershell
+cargo run -- parse examples\features.lux
+```
+
+This is useful when checking whether a new syntax form is recognized before
+lowering or codegen is implemented.
+
+## `lint`
+
+Run syntax, resolver, module, and style checks without generating Lua:
+
+```powershell
+cargo run -- lint examples\features.lux
+```
+
+`lint` reports diagnostics with source spans. It is the cheapest command to run
+in editors and pre-commit checks.
+
+<LuxLuaPair title="Disable one lint locally" luxLabel="Lux" luaLabel="Check meaning">
+
+```lux
+@lint.disable("unused-local")
+local debugValue = expensiveProbe()
+```
+
+```text
+The disable applies to the annotated declaration.
+It does not change generated Lua semantics.
+```
+
+</LuxLuaPair>
+
+Use local disables sparingly. If a rule is wrong for a whole project, configure
+the rule rather than scattering suppressions.
+
+## `format`
+
+Check formatting:
+
+```powershell
+cargo run -- format src\inventory\module.lux --check
+```
+
+Write formatting changes:
+
+```powershell
+cargo run -- format src\inventory\module.lux --write
+```
+
+Formatter output is intended to preserve comments and keep Lux-specific syntax
+readable. Generated Lua formatting is controlled by the emitter, not this
+command.
+
+## `compile`
+
+Compile one Lux file to Lua:
+
+```powershell
+cargo run -- compile examples\features.lux
+```
+
+Emit source comments:
+
+```powershell
+cargo run -- compile examples\features.lux --source-comments readable
+```
+
+Emit a sidecar source map:
+
+```powershell
+cargo run -- compile examples\features.lux --map examples\features.lua.map.json
+```
+
+`compile` is for isolated examples and backend debugging. Use `gmod build` for
+real addon projects so modules, packages, and realms are handled together.
+
+## `map-error`
+
+Map a generated Lua location back to Lux source:
+
+```powershell
+cargo run -- map-error generated\features.lua.map.json 42:9
+```
+
+The input line/column should come from a GMod Lua stack trace or Lua syntax
+error. When source comments are disabled in production output, sidecar maps are
+the main way to recover Lux source locations.
+
+## `gmod build`
+
+Build a GMod project from a manifest:
+
+```powershell
+cargo run -- gmod build --manifest lux.toml
+```
+
+Build with explicit paths:
+
+```powershell
+cargo run -- gmod build src . --generated-root generated
+```
+
+Preview the output plan without writing files:
+
+```powershell
+cargo run -- gmod build --manifest lux.toml --dry-run
+```
+
+`gmod build` performs module discovery, package resolution, realm splitting,
+loader generation, source map generation, and diagnostics for the whole project.
+
+## `gmod package`
+
+Package a built addon with `gmad.exe`:
+
+```powershell
+cargo run -- gmod package --manifest lux.toml --gmad C:\path\to\gmad.exe --out dist\my_addon.gma
+```
+
+Add `--run` to actually invoke `gmad`. Without `--run`, Lux prints the package
+plan so CI and release scripts can inspect it.
+
+```powershell
+cargo run -- gmod package --manifest lux.toml --gmad C:\path\to\gmad.exe --out dist\my_addon.gma --run
+```
+
+Packaging does not replace `gmod build`; it packages the addon layout produced
+by the build step.

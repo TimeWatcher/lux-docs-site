@@ -1,0 +1,333 @@
+---
+title: 运行域
+description: shared、client、server 的来源、声明标记、运行域块、导入检查和外部 API 策略。
+---
+
+# 运行域
+
+GMod 代码天然分成服务端、客户端和共享三类。Lux 用“运行域”（realm）把这件事写进
+源码结构，而不是让开发者维护手写 loader 和散落的 `if SERVER then`。
+
+Lux 支持三个运行域：
+
+```text
+shared  共享：服务端和客户端都可能生成
+server  服务端：只生成到服务端产物
+client  客户端：只生成到客户端产物
+```
+
+## 运行域来源
+
+默认运行域可以来自目录，也可以来自文件前缀。
+
+```text
+src/shared/hud.lux   -> shared
+src/server/init.lux  -> server
+src/client/ui.lux    -> client
+
+sh_items.lux -> shared
+sv_store.lux -> server
+cl_panel.lux -> client
+```
+
+目录和前缀冲突会报错。`src/client/sv_store.lux` 同时声明客户端和服务端，编译器
+不能猜测开发者意图。
+
+## 声明运行域
+
+顶层声明可以显式标记运行域。去掉 `export` 也能写运行域标记；这只是声明可用环境，
+不表示公开 API。
+
+<LuxLuaPair title="运行域声明" luxLabel="Lux" luaLabel="生成 Lua 形态">
+
+```lux
+server fn registerNet() {
+  util.AddNetworkString("inventory")
+}
+
+client fn openInventory() {
+  vgui.Create("DFrame")
+}
+
+shared fn itemName(item) =
+  item.name ?? "Unknown"
+```
+
+```lua
+-- server artifact
+local function registerNet()
+  util.AddNetworkString("inventory")
+end
+
+-- client artifact
+local function openInventory()
+  vgui.Create("DFrame")
+end
+
+-- server and client artifacts
+local function itemName(item)
+  local __value = item.name
+  if __value == nil then
+    __value = "Unknown"
+  end
+  return __value
+end
+```
+
+</LuxLuaPair>
+
+如果需要公开，再单独导出。
+
+<LuxLuaPair title="私有运行域声明再导出" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+server fn privateGrant(player, item) {
+  inventory[player:SteamID64()] = item
+}
+
+export server { grantItem = privateGrant }
+```
+
+```lua
+local function privateGrant(player, item)
+  inventory[player:SteamID64()] = item
+end
+
+__lux_exports.grantItem = privateGrant
+```
+
+</LuxLuaPair>
+
+## 运行域块
+
+共享函数内部可能只有某几段代码属于服务端或客户端。用运行域块表达。
+
+<LuxLuaPair title="server block 替代 if SERVER" luxLabel="Lux" luaLabel="生成 Lua 形态">
+
+```lux
+fn ENT:Initialize() {
+  self:SetNoDraw(true)
+
+  server {
+    self:PhysicsInitBox(Vector(-20, -20, 0), Vector(20, 20, 86))
+  }
+
+  self:SetCustomCollisionCheck(true)
+
+  server {
+    local phys = self:GetPhysicsObject()
+    if phys:IsValid() {
+      phys:EnableMotion(false)
+    }
+  }
+}
+```
+
+```lua
+function ENT:Initialize()
+  self:SetNoDraw(true)
+
+  -- server artifact only
+  self:PhysicsInitBox(Vector(-20, -20, 0), Vector(20, 20, 86))
+
+  self:SetCustomCollisionCheck(true)
+
+  -- server artifact only
+  local phys = self:GetPhysicsObject()
+  if phys:IsValid() then
+    phys:EnableMotion(false)
+  end
+end
+```
+
+</LuxLuaPair>
+
+`server { ... }` 只会进入服务端可用产物，`client { ... }` 只会进入客户端可用产物。
+块外仍然按当前代码的运行域检查。
+
+## shared 不等于每一行都共享
+
+共享 part 中可以同时有共享代码、服务端代码和客户端代码。
+
+<LuxLuaPair title="共享函数中的细粒度运行域" luxLabel="Lux" luaLabel="生成 Lua 形态">
+
+```lux
+fn installEntity(ent) {
+  ent:SetCustomCollisionCheck(true)
+
+  server {
+    ent:PhysicsInit(SOLID_VPHYSICS)
+  }
+
+  client {
+    ent:SetRenderBounds(Vector(-16, -16, 0), Vector(16, 16, 64))
+  }
+}
+```
+
+```lua
+local function installEntity(ent)
+  ent:SetCustomCollisionCheck(true)
+
+  -- server artifact only
+  ent:PhysicsInit(SOLID_VPHYSICS)
+
+  -- client artifact only
+  ent:SetRenderBounds(Vector(-16, -16, 0), Vector(16, 16, 64))
+end
+```
+
+</LuxLuaPair>
+
+关键规则不是“共享文件不能出现服务端 API”，而是“共享运行域的代码不能直接引用
+服务端专用 API”。进入明确的 `server` 或 `client` 区域后，可以使用对应运行域的
+导入和外部 API。
+
+## 导入检查
+
+导入的可用运行域必须覆盖使用位置。
+
+<LuxLuaPair title="server-only 导入只能在 server 上下文使用" luxLabel="Lux" luaLabel="检查结果">
+
+```lux
+import { grantItem } from "../inventory"
+
+shared fn bad(player, item) {
+  grantItem(player, item)
+}
+
+shared fn ok(player, item) {
+  server {
+    grantItem(player, item)
+  }
+}
+```
+
+```lua
+-- bad:
+-- error[REALM_IMPORT_MISMATCH]:
+-- server-only import `grantItem` used in shared context
+
+-- ok:
+local function ok(player, item)
+  -- server artifact only
+  grantItem(player, item)
+end
+```
+
+</LuxLuaPair>
+
+声明本身也可以标记运行域。这个函数即使写在共享 part 里，也只属于服务端运行域。
+
+<LuxLuaPair title="共享文件里的 server 函数" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+server fn grantFromSharedFile(player, item) {
+  grantItem(player, item)
+}
+```
+
+```lua
+-- server artifact only
+local function grantFromSharedFile(player, item)
+  grantItem(player, item)
+end
+```
+
+</LuxLuaPair>
+
+## 外部 API 可用性
+
+GMod 和第三方插件里有大量全局符号。Lux 使用三级模型：
+
+```text
+Lux 绑定          严格检查
+已知 GMod API     严格检查
+未知外部符号       默认允许，但发出警告
+```
+
+未知外部符号不会被当成 shared-safe。编译器内部会把它表示为 `UnknownExternal`，
+只说明“无法证明”，不说明“安全”。
+
+默认诊断形状：
+
+```text
+warning[REALM_UNKNOWN]:
+cannot verify realm availability of external symbol `ThirdPartyAddon`
+used in shared context inside `run`
+
+Add an extern declaration to make this strict:
+  extern shared ThirdPartyAddon
+  extern client ThirdPartyAddon
+  extern server ThirdPartyAddon
+```
+
+团队可以逐步收紧策略：
+
+```toml
+[target.gmod.realm]
+unknown_external = "warn"
+```
+
+可选值：
+
+```text
+allow  不报告未知外部符号
+warn   默认：允许并警告
+error  严格项目或 CI：未知外部符号直接失败
+```
+
+## extern 声明
+
+源码内声明不会生成运行时代码，只会让运行域检查从“未知外部符号”变成严格检查。
+
+<LuxLuaPair title="源码 extern" luxLabel="Lux" luaLabel="生成效果">
+
+```lux
+extern server ThirdPartyAddon
+extern client FancyHud.Open
+extern shared SharedLibrary
+```
+
+```lua
+-- extern 不生成运行时 Lua。
+-- 它为运行域检查器登记外部符号可用域。
+```
+
+</LuxLuaPair>
+
+成员级声明使用最长路径优先。
+
+<LuxLuaPair title="成员级 extern" luxLabel="Lux" luaLabel="检查含义">
+
+```lux
+extern shared net
+extern server net.Start
+extern client net.Receive
+```
+
+```lua
+-- net.Start   -> server-only
+-- net.Receive -> client-only
+-- net.* 其他成员回退到 shared
+```
+
+</LuxLuaPair>
+
+`net.Start` 会优先匹配 `extern server net.Start`，不会被更宽泛的 `extern shared net`
+覆盖。
+
+团队项目也可以放进 `lux.toml`：
+
+```toml
+[target.gmod.extern]
+ThirdPartyAddon = "server"
+net.Start = "server"
+net.Receive = "client"
+
+[target.gmod.extern."FancyHud.Open"]
+realm = "client"
+```
+
+源码里的 `extern` 适合局部说明；配置里的 `extern` 适合团队统一维护的第三方插件和
+二进制模块。

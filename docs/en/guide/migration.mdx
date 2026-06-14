@@ -1,0 +1,146 @@
+---
+title: Migrating From GLua
+description: Replace manual includes, global APIs, and runtime SERVER/CLIENT branches with Lux modules.
+---
+
+# Migrating From GLua
+
+Lux migration is not a line-by-line rewrite. Start by moving handwritten load
+order, globals, and runtime `SERVER`/`CLIENT` branching into the Lux module
+model.
+
+## Replace Loaders with Imports
+
+<LuxLuaPair title="Loader migration" luxLabel="Old GLua" luaLabel="Lux">
+
+```lua
+AddCSLuaFile("cl_panel.lua")
+include("shared.lua")
+include("sv_store.lua")
+```
+
+```lux
+import { formatItem } from "../inventory"
+import { panelTheme } from "./theme"
+```
+
+</LuxLuaPair>
+
+The GMod backend generates loader files from the resolved module graph.
+
+## Replace `if SERVER` Blocks with Realm Blocks
+
+<LuxLuaPair title="Realm block migration" luxLabel="Old GLua" luaLabel="Lux">
+
+```lua
+function ENT:Initialize()
+  self:SetNoDraw(true)
+
+  if SERVER then
+    self:PhysicsInitBox(Vector(-20, -20, 0), Vector(20, 20, 86))
+  end
+end
+```
+
+```lux
+fn ENT:Initialize() {
+  self:SetNoDraw(true);
+
+  server {
+    self:PhysicsInitBox(Vector(-20, -20, 0), Vector(20, 20, 86));
+  }
+}
+```
+
+</LuxLuaPair>
+
+The server block is emitted only into server-capable artifacts. Shared code
+outside that block still cannot call server-only APIs.
+
+<LuxLuaPair title="Realm block generated shape" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+fn ENT:Initialize() {
+  self:SetCustomCollisionCheck(true)
+
+  server {
+    self:PhysicsInitBox(Vector(-20, -20, 0), Vector(20, 20, 86))
+  }
+}
+```
+
+```lua
+function ENT:Initialize()
+  self:SetCustomCollisionCheck(true)
+
+  if SERVER then
+    self:PhysicsInitBox(Vector(-20, -20, 0), Vector(20, 20, 86))
+  end
+end
+```
+
+</LuxLuaPair>
+
+## Split Large Files into Parts
+
+Do not create a fake package just because one file got too large. Put related
+files under the same module directory:
+
+```text
+console/
+  module.lux
+  cl_commands.lux
+  cl_status.lux
+  cl_install.lux
+```
+
+All part files share module-private top-level declarations. Use `part order`
+only when non-function top-level initialization must happen in a specific
+sequence.
+
+<LuxLuaPair title="Part order" luxLabel="Lux" luaLabel="Generated effect">
+
+```lux
+part order { "module", "cl_commands", "cl_status", "cl_install" }
+```
+
+```text
+No runtime Lua is emitted.
+The declaration controls module part ordering.
+```
+
+</LuxLuaPair>
+
+## Keep Public API Small
+
+<LuxLuaPair title="Public name mapping" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+local player_inventory = {}
+
+export { p_inv = player_inventory }
+```
+
+```lua
+local player_inventory = {}
+
+__lux_exports.p_inv = player_inventory
+```
+
+</LuxLuaPair>
+
+Other modules import the public name.
+
+<LuxLuaPair title="Import public name" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+import { p_inv as inventory } from "../inventory"
+```
+
+```lua
+local inventory = __lux_import("../inventory").p_inv
+```
+
+</LuxLuaPair>
+
+The internal name `player_inventory` remains private.

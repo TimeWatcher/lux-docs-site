@@ -1,0 +1,169 @@
+---
+title: GMod 后端
+description: Lux 如何为 GMod 生成 Lua、loader、运行域产物、源码映射和可选 GMA 打包计划。
+---
+
+# GMod 后端
+
+GMod 不是普通 Lua 运行环境。一个插件同时涉及服务端 include、客户端文件分发、
+`autorun` 顺序、`AddCSLuaFile`、`lua/` 挂载命名冲突和 Workshop 打包。Lux 的
+GMod 后端把这些规则从手写 loader 迁移到编译器构建计划里。
+
+## 后端负责什么
+
+`luxc gmod build` 会执行这些步骤：
+
+1. 递归发现 `source_root` 下的 `.lux` 文件。
+2. 按目录和文件名前缀推断每个 part 的默认运行域。
+3. 把同一模块目录下的 part 合并成一个逻辑模块。
+4. 解析相对导入、包导入、导出映射和运行域可用性。
+5. 按客户端/服务端生成需要的模块产物。
+6. 编译依赖到的运行时包，例如 `@lux/std`、`@lux/gmod`、`@lux/mgfx`。
+7. 写出 `.lua`、`.lua.map.json` 和 `autorun` loader。
+8. 可选地生成 `gmad` 打包命令。
+
+后端不会自动发布 Workshop，也不会在没有 `--run` 的情况下调用 `gmad`。
+
+## 最小配置
+
+```toml
+[gmod]
+source_root = "src"
+addon_root = "."
+generated_root = "generated"
+package_id = "my_addon"
+bundle_id = "my_addon"
+source_comments = "boundary"
+
+[target.gmod.realm]
+unknown_external = "warn"
+```
+
+必要字段只有 `source_root` 和 `addon_root`。其余字段建议在真实项目中显式写出：
+
+- `package_id`：项目模块 ID 前缀，也用于 loader 文件命名空间。
+- `bundle_id`：生成 Lua 模块根目录和私有注册表命名空间。
+- `generated_root`：生成文件写入位置；省略时等于 `addon_root`。
+- `source_comments`：源码注释模式。
+- `unknown_external`：未知外部符号策略。
+
+如果不写 `package_id`，编译器会从源码目录或其父目录推断。团队项目建议显式指定，
+避免目录改名导致生成路径变化。
+
+## 生成布局
+
+以 `package_id = "my_addon"`、`bundle_id = "my_addon"` 为例：
+
+```text
+generated/
+  lua/
+    autorun/
+      lux_my_addon_init.lua
+      client/lux_my_addon_cl_init.lua
+      server/lux_my_addon_sv_init.lua
+    lux/
+      my_addon/
+        client/
+          my_addon/hud.lua
+          runtime/lux/std.lua
+        server/
+          my_addon/init.lua
+          runtime/lux/std.lua
+```
+
+GMod 会把所有插件的文件挂载到同一个 `lua/` 命名空间下。Lux 不生成通用
+`lux_init.lua`，而是把项目命名空间写进 loader 文件名，避免不同插件互相覆盖。
+
+## 构建命令
+
+使用配置文件：
+
+```powershell
+cd C:\Development\gmod\lux\compiler
+cargo run -- gmod build --manifest path\to\lux.toml
+```
+
+查看计划但不写文件：
+
+```powershell
+cargo run -- gmod build --manifest path\to\lux.toml --dry-run
+```
+
+临时测试时也可以直接给路径：
+
+```powershell
+cargo run -- gmod build path\to\src path\to\addon --generated-root path\to\generated
+```
+
+构建输出会报告模块数量、产物数量和三个 loader 路径：
+
+```text
+GMod build planned 8 module(s), 12 artifact(s)
+shared loader: generated\lua\autorun\lux_my_addon_init.lua
+client loader: generated\lua\autorun\client\lux_my_addon_cl_init.lua
+server loader: generated\lua\autorun\server\lux_my_addon_sv_init.lua
+wrote generated Lua, source maps, and loader files
+```
+
+## 运行域产物
+
+共享模块会在客户端和服务端都注册。客户端模块只进入客户端 loader，服务端模块只进入
+服务端 loader。源码里可以混合运行域。
+
+<LuxLuaPair title="server block 只进入服务端产物" luxLabel="Lux" luaLabel="生成 Lua 形态">
+
+```lux
+fn ENT:Initialize() {
+  self:SetCustomCollisionCheck(true)
+
+  server {
+    self:PhysicsInit(SOLID_VPHYSICS)
+  }
+}
+```
+
+```lua
+-- server artifact
+function ENT:Initialize()
+  self:SetCustomCollisionCheck(true)
+  self:PhysicsInit(SOLID_VPHYSICS)
+end
+
+-- client artifact
+function ENT:Initialize()
+  self:SetCustomCollisionCheck(true)
+end
+```
+
+</LuxLuaPair>
+
+后端会把 `server { ... }` 的内容只发往服务端产物。共享部分仍然进入双方产物。
+
+## 打包为 GMA
+
+```powershell
+cargo run -- gmod package `
+  --manifest path\to\lux.toml `
+  --gmad "C:\Program Files (x86)\Steam\steamapps\common\GarrysMod\bin\gmad.exe" `
+  --out dist\my_addon.gma
+```
+
+默认只打印打包命令计划，不执行：
+
+```text
+package dry run: pass --run to execute gmad
+```
+
+确认无误后再加 `--run`：
+
+```powershell
+cargo run -- gmod package --manifest path\to\lux.toml --gmad path\to\gmad.exe --out dist\my_addon.gma --run
+```
+
+## 开发建议
+
+- 先让 `generated_root` 指向独立目录，确认生成内容后再复制到 live addon。
+- 保留 `.lua.map.json`，GMod 报错时用 `map-error` 查回 Lux 源码。
+- 迁移早期使用 `unknown_external = "warn"`，整理完第三方 API 后在 CI 中改成
+  `error`。
+- 不要手写生成目录里的 loader；这些文件每次构建都会被覆盖。

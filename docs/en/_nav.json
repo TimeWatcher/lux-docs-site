@@ -1,0 +1,32 @@
+[
+  {
+    "text": "Guide",
+    "link": "/guide/getting-started",
+    "activeMatch": "/guide/"
+  },
+  {
+    "text": "Language",
+    "link": "/language/",
+    "activeMatch": "/language/"
+  },
+  {
+    "text": "GMod",
+    "link": "/gmod/",
+    "activeMatch": "/gmod/"
+  },
+  {
+    "text": "Packages",
+    "link": "/packages/",
+    "activeMatch": "/packages/"
+  },
+  {
+    "text": "MGFX",
+    "link": "/mgfx/",
+    "activeMatch": "/mgfx/"
+  },
+  {
+    "text": "Reference",
+    "link": "/reference/cli",
+    "activeMatch": "/reference/"
+  }
+]

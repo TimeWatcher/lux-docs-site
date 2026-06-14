@@ -1,0 +1,245 @@
+---
+title: Diagnostics
+description: Important Lux diagnostic categories, common causes, and practical fixes.
+---
+
+# Diagnostics
+
+Lux diagnostics are intended to point at the source-level rule that failed, not
+at generated Lua. The most useful diagnostic is one that names the rule,
+identifies the binding or module involved, and suggests the smallest fix.
+
+## Severity Levels
+
+Lux diagnostics use three practical severities:
+
+```text
+error   compilation cannot continue safely
+warning compilation may continue, but the compiler cannot prove safety
+note    supporting context for another diagnostic
+```
+
+Unknown external realm use is a warning by default. Known realm mismatches are
+errors.
+
+## Parse Errors
+
+Parse errors report syntax that Lux cannot interpret. The fix is usually local:
+close a block, choose the supported declaration order, or use the documented
+alias syntax.
+
+<LuxLuaPair title="extern missing realm" luxLabel="Invalid Lux" luaLabel="Diagnostic / fix">
+
+```lux
+extern ThirdPartyAddon
+```
+
+```text
+error[PARSE_EXTERN_REALM]:
+extern declarations require a realm
+
+Use one of:
+  extern shared ThirdPartyAddon
+  extern client ThirdPartyAddon
+  extern server ThirdPartyAddon
+```
+
+</LuxLuaPair>
+
+For export aliases, Lux accepts `public = local` and `local as public`. If a
+team chooses one style, keep it consistent in that codebase.
+
+## Module Graph Errors
+
+Module graph errors involve module discovery, duplicate bindings, export names,
+or imports that cannot be resolved.
+
+<LuxLuaPair title="Public name is not internal name" luxLabel="Target module Lux" luaLabel="User module Lux">
+
+```lux
+// inventory/module.lux
+local player_inventory = {}
+export { p_inv = player_inventory }
+```
+
+```lux
+// other module
+import { player_inventory } from "inventory"
+// error: the public name is p_inv, not player_inventory
+```
+
+</LuxLuaPair>
+
+When a diagnostic mentions a public name, check the target module's `export`
+mapping first.
+
+## Part Order Errors
+
+Part order errors usually mean a module's initialization cannot be made
+deterministic:
+
+- complete `part order` outside the entry part;
+- target part not found;
+- ambiguous short target name;
+- duplicate target in one order list;
+- ordering cycle.
+
+<LuxLuaPair title="part order fix" luxLabel="Lux" luaLabel="Generated effect">
+
+```lux
+// module.lux
+part order { "module", "sh_items", "sv_store", "cl_panel" }
+```
+
+```text
+Move complete part order into the entry part.
+The declaration emits no runtime Lua.
+```
+
+</LuxLuaPair>
+
+Use `module.lux`, `cl_module.lux`, `sv_module.lux`, or `sh_module.lux` as the
+module entry.
+
+## Realm Errors
+
+Realm diagnostics compare the active use-site realm to the symbol's availability.
+
+<LuxLuaPair title="Move use-site into server block" luxLabel="Lux" luaLabel="Check result">
+
+```lux
+import { grant } from "inventory"
+
+fn sharedTick(ply) {
+  server {
+    grant(ply, "coin")
+  }
+}
+```
+
+```text
+ok:
+the import is server-only, and the use-site is inside a server block
+```
+
+</LuxLuaPair>
+
+Sometimes the right fix is to mark the whole function, not just one statement.
+
+<LuxLuaPair title="Mark the whole function realm" luxLabel="Lux" luaLabel="Check result">
+
+```lux
+import { grant } from "inventory"
+
+server fn grantCoin(ply) {
+  grant(ply, "coin")
+}
+```
+
+```text
+ok:
+grantCoin is server-only, so server-only imports are available throughout it
+```
+
+</LuxLuaPair>
+
+Unknown external symbols are different from known mismatches. They warn by
+default because the compiler cannot prove their realm.
+
+<LuxLuaPair title="Fix unknown external with extern" luxLabel="Lux" luaLabel="Manifest form">
+
+```lux
+extern server ThirdPartyAddon
+```
+
+```toml
+[target.gmod.extern]
+ThirdPartyAddon = "server"
+```
+
+</LuxLuaPair>
+
+Set `[target.gmod.realm].unknown_external = "error"` when you want CI to reject
+undeclared third-party globals.
+
+## Match Errors
+
+`match` diagnostics are usually about non-exhaustive enum handling or impossible
+patterns.
+
+<LuxLuaPair title="Non-exhaustive match" luxLabel="Lux" luaLabel="Diagnostic / fix">
+
+```lux
+enum Tab repr string {
+  Home = "home",
+  Settings = "settings",
+  Profile = "profile",
+}
+
+local title = match tab {
+  Tab.Home => "Home"
+  Tab.Settings => "Settings"
+}
+```
+
+```text
+error[MATCH_NON_EXHAUSTIVE]:
+match over enum `Tab` does not cover `Tab.Profile`
+
+Fix by adding Tab.Profile or an explicit `_` fallback branch.
+```
+
+</LuxLuaPair>
+
+Prefer handling all known enum cases explicitly. Use `_` when the value space is
+intentionally open or when a future-proof fallback is the desired behavior.
+
+## Lint Diagnostics
+
+Lint diagnostics cover maintainability rules such as unused locals, suspicious
+imports, or code patterns with a clearer Lux equivalent.
+
+<LuxLuaPair title="Disable lint locally" luxLabel="Lux" luaLabel="Check meaning">
+
+```lux
+@lint.disable("unused-local")
+local probe = expensiveDebugProbe()
+```
+
+```text
+The suppression applies to this declaration only.
+Generated Lua is unchanged.
+```
+
+</LuxLuaPair>
+
+Prefer small local suppressions over disabling a rule globally unless the whole
+project intentionally follows a different style.
+
+## Macro and Host Transform Errors
+
+Macro errors distinguish user mistakes from macro author mistakes:
+
+- invalid macro call position;
+- invalid arity;
+- statement expansion used where an expression is required;
+- macro returned a non-AST value;
+- host transform returned an invalid replacement;
+- internal macro helper misuse.
+
+Macro authors should report user-facing failures through helper APIs such as
+`m.fail`, `m.expectArgCount`, `m.expr`, and `m.stmts`. That keeps diagnostic
+codes stable and points the span at the user call.
+
+## Troubleshooting Order
+
+When several diagnostics appear at once, fix them in this order:
+
+1. Parse errors, because later phases may be missing syntax tree nodes.
+2. Module discovery and import resolution errors.
+3. Duplicate module-scope bindings and export collisions.
+4. Part order and use-before-initialization errors.
+5. Realm errors and unknown external warnings.
+6. Lint and style diagnostics.
+
+This order usually reduces cascaded errors fastest.

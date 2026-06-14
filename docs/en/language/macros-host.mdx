@@ -1,0 +1,339 @@
+---
+title: Macros and Host Transforms
+description: Compile-time macro imports, expression macros, statement macros, realm-safe expansions, host transforms, diagnostics, and source maps.
+---
+
+# Macros and Host Transforms
+
+Lux deliberately separates two extension mechanisms:
+
+- macros expand explicit macro calls at compile time;
+- host transforms rewrite calls imported from a target module.
+
+Both mechanisms live in Lux packages. They are compiler extensions, not runtime
+parsers hidden inside GLua hooks.
+
+## Package Phases
+
+A Lux package may participate in three phases:
+
+```text
+source package -> macro package -> host transform package
+```
+
+Runtime imports produce Lua locals. Macro imports produce compile-time bindings.
+Host transforms attach rewrite rules to normal runtime imports from a specific
+module.
+
+Keeping the phases separate prevents a macro helper from accidentally becoming a
+runtime global and lets diagnostics say which phase failed.
+
+## Using Macros
+
+Import macros with `import macro`. Macro calls expand before runtime codegen.
+
+<LuxLuaPair title="Macro call expands at compile time" luxLabel="User Lux" luaLabel="Generated Lua">
+
+```lux
+import macro { color } from "@lux/gmod/macros"
+
+local accent = color("#22cc88")
+```
+
+```lua
+local accent = Color(34, 204, 136)
+```
+
+</LuxLuaPair>
+
+Namespace macro imports are also supported.
+
+<LuxLuaPair title="Namespace macro import" luxLabel="Lux" luaLabel="Generated effect">
+
+```lux
+import macro * as gm from "@lux/gmod/macros"
+
+gm.concommand("lux_debug", () => print("debug"))
+```
+
+```text
+`gm` is a compile-time namespace.
+Only the macro expansion is emitted to Lua.
+```
+
+</LuxLuaPair>
+
+Macro bindings are not runtime values.
+
+<LuxLuaPair title="Macro binding is not a runtime value" luxLabel="Invalid Lux" luaLabel="Diagnostic">
+
+```lux
+import macro { color } from "@lux/gmod/macros"
+
+local makeColor = color
+```
+
+```text
+error[MACRO_VALUE_USE]:
+macro binding `color` cannot be used as a runtime value
+```
+
+</LuxLuaPair>
+
+## Writing Macros
+
+Macro packages use the compiler macro API. MVP documentation shows the shape,
+not a promise that every helper is stable forever.
+
+<LuxLuaPair title="Minimal expression macro" luxLabel="Macro package Lux" luaLabel="Use-site meaning">
+
+```lux
+export macro fn sqr(m) {
+  m.expectArgCount(1)
+  local x = m.arg(1)
+  m.expr(`(${x}) * (${x})`)
+}
+```
+
+```lua
+-- sqr(speed) at the use site expands to:
+(speed) * (speed)
+```
+
+</LuxLuaPair>
+
+Prefer macro helper APIs such as `m.expectArgCount`, `m.fail`, `m.expr`, and
+`m.stmts` over hand-built AST tables. That keeps diagnostics stable and gives
+errors the original call span.
+
+## `exprWithSetup`
+
+Some expression macros need temporary statements before the final expression.
+`exprWithSetup` lets the macro return both.
+
+<LuxLuaPair title="Expression macro with setup" luxLabel="Macro package Lux" luaLabel="Use-site meaning">
+
+```lux
+export macro fn cachedMaterial(m) {
+  m.expectArgCount(1)
+  local path = m.arg(1)
+  m.exprWithSetup({
+    setup = m.stmts(`
+      local __lux_mat = Material(${path})
+    `),
+    expr = m.expr(`__lux_mat`),
+  })
+}
+```
+
+```lua
+local __lux_mat = Material("icon16/star.png")
+local icon = __lux_mat
+```
+
+</LuxLuaPair>
+
+The compiler chooses a hygienic temporary name when the macro asks for one.
+Avoid hard-coding user-visible names unless the macro intentionally declares an
+API.
+
+## Statement Macros
+
+Statement macros expand into one or more statements. They cannot be used where a
+value is required.
+
+<LuxLuaPair title="GMod hook macro" luxLabel="User Lux" luaLabel="Generated Lua">
+
+```lux
+import macro { hookAdd } from "@lux/gmod/macros"
+
+hookAdd("Think", "my_addon.tick", () => tickPlayers())
+```
+
+```lua
+hook.Add("Think", "my_addon.tick", function()
+  return tickPlayers()
+end)
+```
+
+</LuxLuaPair>
+
+Using a statement macro in expression position is a compile-time error.
+
+<LuxLuaPair title="Statement macro cannot be an expression" luxLabel="Invalid Lux" luaLabel="Diagnostic">
+
+```lux
+local installed = hookAdd("Think", "id", () => tick())
+```
+
+```text
+error[MACRO_STATEMENT_IN_EXPR]:
+statement macro `hookAdd` cannot be used where an expression is required
+```
+
+</LuxLuaPair>
+
+## Realm-safe Macros
+
+Macro expansion must respect realm checks. A server-only macro cannot make
+client artifacts evaluate server-only arguments.
+
+<LuxLuaPair title="server-only macro does not evaluate arguments on client" luxLabel="User Lux" luaLabel="Generated Lua">
+
+```lux
+server macro netMessage("InventoryUpdate") {
+  sendInventory(ply)
+}
+```
+
+```lua
+-- server artifact
+util.AddNetworkString("InventoryUpdate")
+sendInventory(ply)
+
+-- client artifact
+-- no expansion and no evaluation of sendInventory(ply)
+```
+
+</LuxLuaPair>
+
+This is why macros participate in the same realm availability model as normal
+bindings.
+
+## What Host Transforms Are
+
+A host transform rewrites calls that target an imported API. It is useful when a
+runtime library wants a natural call surface while the generated Lua should be
+denser or more GLua-native.
+
+<LuxLuaPair title="Only imports from the target module are transformed" luxLabel="User Lux" luaLabel="Generated Lua">
+
+```lux
+import { node } from "@lux/ui"
+
+local view = node("Panel", {
+  class = "inventory",
+})
+```
+
+```lua
+local view = __lux_ui_create_node("Panel", {
+  class = "inventory",
+})
+```
+
+</LuxLuaPair>
+
+The transform is tied to the resolved imported binding, not the spelling alone.
+A local binding with the same name is not rewritten.
+
+<LuxLuaPair title="Local same-name binding does not trigger host transform" luxLabel="Lux" luaLabel="Generated Lua shape">
+
+```lux
+local node = makeDebugNode
+
+local view = node("Panel")
+```
+
+```lua
+local node = makeDebugNode
+
+local view = node("Panel")
+```
+
+</LuxLuaPair>
+
+That rule prevents accidental rewrites in large modules.
+
+## Writing Host Transforms
+
+A host transform package declares which module it transforms and exports rewrite
+handlers.
+
+<LuxLuaPair title="Host transform package shape" luxLabel="Host package Lux" luaLabel="Use-site generated shape">
+
+```lux
+host transform "@lux/ui" {
+  call node(call) {
+    local tag = call.arg(1)
+    local props = call.arg(2)
+    call.replaceExpr(`__lux_ui_create_node(${tag}, ${props})`)
+  }
+}
+```
+
+```lua
+local view = __lux_ui_create_node("Panel", props)
+```
+
+</LuxLuaPair>
+
+Transforms should report user-facing errors with source spans from the original
+call. A transform error should not look like an internal compiler crash.
+
+## `call.imported` and `call.local`
+
+Host transform callbacks can see both the public imported name and the local
+alias chosen by the user.
+
+<LuxLuaPair title="Host transform sees imported/local names" luxLabel="Lux" luaLabel="Transform call information">
+
+```lux
+import { node as uiNode } from "@lux/ui"
+
+uiNode("Panel", {})
+```
+
+```text
+call.imported = "node"
+call.local = "uiNode"
+```
+
+</LuxLuaPair>
+
+Use `call.imported` to decide semantics. Use `call.local` only for diagnostics
+that should echo the user's source spelling.
+
+## Choosing Macro vs Host Transform
+
+Use a macro when the source explicitly opts into a compile-time operation:
+
+- compile-time constants such as colors or materials;
+- syntax-like helpers for hooks or commands;
+- compile-time validation of literal arguments.
+
+Use a host transform when a runtime API should stay readable but the compiler
+can produce better Lua for known calls:
+
+- UI tree builders;
+- dense draw command builders;
+- domain-specific call lowering for packages.
+
+Avoid using host transforms as invisible magic for ordinary functions. The more
+surprising the rewrite, the more it should be an explicit macro.
+
+## Diagnostics and Errors
+
+Macro diagnostics distinguish user mistakes from macro author mistakes:
+
+- invalid macro call position;
+- invalid arity;
+- statement expansion where an expression is required;
+- macro returned a non-AST value;
+- internal macro helper misuse.
+
+When a macro author calls `m.fail`, the diagnostic points at the macro call. When
+the macro package itself crashes, Lux reports that as a macro implementation
+error with both the macro package span and use-site span when possible.
+
+## Source Maps
+
+Generated Lua should map back to the user's Lux source, not only to macro
+package internals. Macro expansions therefore carry expansion spans:
+
+- user call span for diagnostics caused by user arguments;
+- macro definition span for errors in macro code;
+- generated Lua span for runtime stack correlation.
+
+This is especially important in GMod, where production errors usually arrive as
+Lua stack traces.

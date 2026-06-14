@@ -1,0 +1,296 @@
+---
+title: 模块和 Part
+description: 目录模块、模块私有作用域、part-local 导入、函数提升和确定性初始化顺序。
+---
+
+# 模块和 Part
+
+Lux 模块不是一个文件，而是一个逻辑单元。项目构建时，同一模块目录下的所有
+`.lux` part 文件共享一个模块私有作用域。编译到 Lua 时，后端会把这些 part 按
+确定顺序合并进同一个模块工厂。
+
+```text
+inventory/
+  module.lux
+  sh_items.lux
+  sv_store.lux
+  cl_panel.lux
+```
+
+上面四个文件共同组成 `inventory` 模块。
+
+## 模块作用域
+
+任意 part 的顶层声明都会创建模块私有绑定。其他 part 可以直接使用这些绑定，不需要
+导入同级文件。
+
+<LuxLuaPair title="跨 part 使用模块私有函数" luxLabel="Lux parts" luaLabel="合并后 Lua">
+
+```lux
+-- sh_items.lux
+fn formatItem(item) =
+  item?.name ?? "Unknown"
+
+-- cl_panel.lux
+client fn drawItem(item) {
+  draw.SimpleText(formatItem(item), "DermaDefault", 0, 0)
+}
+```
+
+```lua
+local function formatItem(item)
+  local __value = nil
+  if item ~= nil then
+    __value = item.name
+  end
+  if __value == nil then
+    __value = "Unknown"
+  end
+
+  return __value
+end
+
+local function drawItem(item)
+  draw.SimpleText(formatItem(item), "DermaDefault", 0, 0)
+end
+```
+
+</LuxLuaPair>
+
+这些绑定仍然受运行域检查约束。客户端代码不能调用服务端专用函数；共享代码只有在
+明确进入 `server { ... }` 或 `client { ... }` 运行域时，才能使用对应运行域的绑定。
+
+## 导入是 part 局部的
+
+顶层 `import` 只在当前 part 内创建局部绑定，不会自动变成整个模块可见。
+
+<LuxLuaPair title="part-local import" luxLabel="Lux part" luaLabel="生成 Lua">
+
+```lux
+-- cl_panel.lux
+import { color } from "@lux/gmod"
+
+client fn drawPanel() {
+  color.withAlpha(Color(255, 255, 255), 180)
+}
+```
+
+```lua
+local __lux_gmod = __lux_import("@lux/gmod")
+local color = __lux_gmod.color
+
+local function drawPanel()
+  color.withAlpha(Color(255, 255, 255), 180)
+end
+```
+
+</LuxLuaPair>
+
+另一个 part 如果也要用 `color`，应该自己导入。这样依赖关系停留在实际使用它的文件
+里，不会因为模块内部共享作用域变得难追踪。
+
+## 函数提升
+
+简单名字的顶层 `fn` 会在整个模块内提升绑定，因此跨 part 的函数可以互相调用。
+
+<LuxLuaPair title="跨 part 函数提升" luxLabel="Lux parts" luaLabel="生成 Lua">
+
+```lux
+-- a.lux
+fn a() = b()
+
+-- b.lux
+fn b() = 1
+```
+
+```lua
+local a
+local b
+
+a = function()
+  return b()
+end
+
+b = function()
+  return 1
+end
+```
+
+</LuxLuaPair>
+
+提升的是函数绑定，不是普通语句的执行。点号/冒号 GLua 方法声明不会被当作模块私有
+函数提升。
+
+## 顶层初始化
+
+非函数顶层 `local` / `const` 不按值提升。它们按照 part 顺序初始化。
+
+<LuxLuaPair title="非函数顶层值按 part 顺序初始化" luxLabel="Lux parts" luaLabel="生成 Lua 顺序">
+
+```lux
+-- module.lux
+part order { "module", "state", "install" }
+
+-- state.lux
+local state = {}
+
+-- install.lux
+fn currentState() = state
+```
+
+```lua
+local currentState
+local state
+
+state = {}
+
+currentState = function()
+  return state
+end
+```
+
+</LuxLuaPair>
+
+如果某个 part 在初始化前读取了另一个顶层值，编译器应报告使用前初始化错误。这就是
+为什么有初始化依赖时必须写清楚 part 顺序。
+
+## 入口 part
+
+多 part 模块必须有一个入口 part：
+
+```text
+module.lux
+cl_module.lux
+sv_module.lux
+sh_module.lux
+```
+
+入口 part 是开发者打开模块时的主文件，建议放：
+
+- `part order { ... }`
+- 模块级常量和轻量工具
+- 对外 `export { ... }`
+- 必要的 `extern` 声明
+
+只包含顺序和导出的空入口也是合法的。
+
+## Part 顺序
+
+默认顺序是入口 part 在前，其余 part 按稳定路径排序。需要完整编排时，在入口 part
+写 `part order`。
+
+<LuxLuaPair title="完整 part order" luxLabel="入口 part" luaLabel="生成效果">
+
+```lux
+part order {
+  "module",
+  "shared/base",
+  "client/panel",
+  "client/install",
+}
+```
+
+```lua
+-- part order 本身不生成运行时代码。
+-- 它决定后端合并 part 的顺序：
+-- 1. module.lux
+-- 2. shared/base.lux
+-- 3. client/panel.lux
+-- 4. client/install.lux
+```
+
+</LuxLuaPair>
+
+路径写相对模块目录、不带 `.lux` 后缀。`part before` 和 `part after` 只适合小范围
+约束。
+
+<LuxLuaPair title="局部顺序约束" luxLabel="当前 part" luaLabel="生成效果">
+
+```lux
+part after "sh_items"
+part before "cl_panel"
+```
+
+```lua
+-- before/after 不生成运行时代码。
+-- 它们只向模块排序器添加当前 part 的前后约束。
+```
+
+</LuxLuaPair>
+
+完整编排不要靠大量前后关系拼出来。大型模块应该使用 `part order`。
+
+这些情况会报错：
+
+- `part order` 不在入口 part。
+- 同一个顺序列表里出现重复目标。
+- 目标 part 不存在。
+- 短名匹配到多个 part，产生歧义。
+- `before` / `after` 形成循环。
+
+## 重名规则
+
+MVP 0.1 中，模块作用域内的顶层绑定不能重名，即使它们属于不同运行域。
+
+<LuxLuaPair title="内部绑定名不能重复" luxLabel="Lux" luaLabel="编译期诊断">
+
+```lux
+server fn install() {}
+client fn install() {}
+```
+
+```lua
+-- error[MODULE_DUPLICATE_BINDING]:
+-- duplicate module-scope binding `install`
+```
+
+</LuxLuaPair>
+
+推荐使用清晰内部名，再用导出别名塑造外部 API。
+
+<LuxLuaPair title="用导出别名塑造公开 API" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+server fn installServer() {}
+client fn installClient() {}
+
+export server { install = installServer }
+export client { install = installClient }
+```
+
+```lua
+local function installServer()
+end
+
+local function installClient()
+end
+
+__lux_exports.install = installServer -- server artifact
+__lux_exports.install = installClient -- client artifact
+```
+
+</LuxLuaPair>
+
+是否允许同一公开名在不同运行域有不同内部实现，由导出冲突策略控制；内部绑定名在
+MVP 中保持严格唯一。
+
+## 不要导入同模块 part
+
+下面这种写法是错误的设计方向：
+
+<LuxLuaPair title="同模块 part 不需要 import" luxLabel="Lux" luaLabel="编译期诊断">
+
+```lux
+import { formatItem } from "./sh_items"
+```
+
+```lua
+-- error[MODULE_PART_IMPORT]:
+-- `sh_items.lux` belongs to the same logical module.
+-- Use the module-scope binding directly instead.
+```
+
+</LuxLuaPair>
+
+如果 `sh_items.lux` 与当前文件属于同一模块，`formatItem` 已经在模块作用域内可见。
+导入只用于跨模块依赖。

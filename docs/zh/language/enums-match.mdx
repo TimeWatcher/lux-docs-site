@@ -1,0 +1,353 @@
+---
+title: 枚举与模式匹配
+description: scalar enum、runtime enum、table enum、existing view 与 match 检查。
+---
+
+# 枚举与模式匹配
+
+Lux 的 `enum` 和 `match` 首先服务两个目标：
+
+- 让源码明确表达“这个值属于哪些固定分支”。
+- 让编译器生成可预测的 Lua，而不是在运行时引入沉重的代数数据类型框架。
+
+因此 Lux 的枚举分成几类。默认的标量枚举是零运行时的；只有你显式要求
+`runtime`，才会生成可导出的运行时表。用于既有 GLua 数据结构的枚举可以写成
+`repr existing`，它不改变数据，只给 `match` 一个可检查的视图。
+
+下面的 Lua 代码展示生成意图，实际临时变量名可能不同。
+
+## 标量枚举默认零运行时
+
+`repr number` 和 `repr string` 是标量枚举。没有 `runtime` 时，枚举只存在于编译期：
+成员引用会直接降成字面量，不生成 Lua 表。
+
+<LuxLuaPair title="number enum 编译成数字比较">
+
+```lux
+enum FillKind repr number {
+  Solid = 0,
+  Linear = 1,
+}
+
+fn label(kind) =
+  match kind {
+    FillKind.Solid => "solid"
+    FillKind.Linear => "linear"
+  }
+```
+
+```lua
+local function label(kind)
+  local __subject = kind
+
+  if __subject == 0 then
+    return "solid"
+  elseif __subject == 1 then
+    return "linear"
+  end
+end
+```
+
+</LuxLuaPair>
+
+<LuxLuaPair title="string enum 编译成字符串比较">
+
+```lux
+enum Align repr string {
+  Left = "left",
+  Center = "center",
+  Right = "right",
+}
+
+fn isCentered(value) =
+  match value {
+    Align.Center => true
+    _ => false
+  }
+```
+
+```lua
+local function isCentered(value)
+  local __subject = value
+
+  if __subject == "center" then
+    return true
+  else
+    return false
+  end
+end
+```
+
+</LuxLuaPair>
+
+零运行时枚举不能直接导出，因为运行时没有名为 `FillKind` 的对象可给外部模块导入。
+如果模块 API 需要暴露枚举对象，必须显式写 `runtime`。
+
+## runtime 标量枚举
+
+`runtime enum` 会生成一个 Lua 表。它适合公开 API、调试输出、或者需要把枚举值集中
+传给普通 Lua 代码的场景。
+
+<LuxLuaPair title="runtime enum 可导出">
+
+```lux
+export runtime enum FillKind repr number {
+  Solid = 0,
+  Linear = 1,
+}
+
+export fn isSolid(kind) =
+  kind == FillKind.Solid
+```
+
+```lua
+local FillKind = {
+  Solid = 0,
+  Linear = 1,
+}
+
+local function isSolid(kind)
+  return kind == FillKind.Solid
+end
+
+__lux_exports.FillKind = FillKind
+__lux_exports.isSolid = isSolid
+```
+
+</LuxLuaPair>
+
+也可以把 `runtime` 放在声明末尾：
+
+<LuxLuaPair title="runtime 后置写法" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+enum FillKind repr number runtime {
+  Solid = 0,
+  Linear = 1,
+}
+```
+
+```lua
+local FillKind = {
+  Solid = 0,
+  Linear = 1,
+}
+```
+
+</LuxLuaPair>
+
+团队代码建议统一一种写法。文档和包源码优先使用 `export runtime enum ...`，因为
+“是否导出”和“是否生成运行时对象”都在声明开头可见。
+
+## table enum
+
+`repr table(tag = "...")` 表示 Lux 拥有这个值的表结构。它会用指定字段存分支标签，
+其他字段存分支数据。
+
+<LuxLuaPair title="table enum 构造值">
+
+```lux
+enum Fill repr table(tag = "__tag") {
+  Solid(tag = 1, color: Color),
+  Linear(tag = 2, from: Color, to: Color),
+}
+
+local fill = Fill.Linear(red, blue)
+```
+
+```lua
+local Fill = {}
+
+function Fill.Solid(color)
+  return {
+    __tag = 1,
+    color = color,
+  }
+end
+
+function Fill.Linear(from, to)
+  return {
+    __tag = 2,
+    from = from,
+    to = to,
+  }
+end
+
+local fill = Fill.Linear(red, blue)
+```
+
+</LuxLuaPair>
+
+独立的 `repr tagged` 已废弃，应写成 `repr table(tag = "...")`。这样标签字段名在
+声明处明确，和现有表布局、调试输出、序列化约定都更容易对齐。
+
+`match` table enum 时，编译器会先读一次标签字段，再在命中分支里绑定字段。
+
+<LuxLuaPair title="table enum match">
+
+```lux
+fn preview(fill) =
+  match fill {
+    Fill.Solid { color } => color
+    Fill.Linear { from, to } => color.lerp(0.5, from, to)
+  }
+```
+
+```lua
+local function preview(fill)
+  local __subject = fill
+  local __tag = __subject.__tag
+
+  if __tag == 1 then
+    local color = __subject.color
+    return color
+  elseif __tag == 2 then
+    local from = __subject.from
+    local to = __subject.to
+    return color.lerp(0.5, from, to)
+  end
+end
+```
+
+</LuxLuaPair>
+
+`match fill` 本身不是 `nil` 安全的。如果 `fill` 可以为空，先用 `stopif`、`??` 或
+普通条件处理。
+
+## existing view
+
+GMod 和第三方库经常已经有自己的表布局。`repr existing` 用来描述这种既有布局：
+Lux 不创建值，不改变表，只让 `match` 知道应该读哪个字段当标签。
+
+<LuxLuaPair title="existing view 不创建构造器">
+
+```lux
+enum FillView repr existing(kind = "kind") {
+  Solid(kind = FILL_SOLID, color: Color),
+  Linear(kind = FILL_LINEAR, from: Color, to: Color),
+}
+
+fn preview(fill) =
+  match fill {
+    FillView.Solid { color } => color
+    FillView.Linear { from, to } => color.lerp(0.5, from, to)
+  }
+```
+
+```lua
+local function preview(fill)
+  local __subject = fill
+  local __tag = __subject.kind
+
+  if __tag == FILL_SOLID then
+    local color = __subject.color
+    return color
+  elseif __tag == FILL_LINEAR then
+    local from = __subject.from
+    local to = __subject.to
+    return color.lerp(0.5, from, to)
+  end
+end
+```
+
+</LuxLuaPair>
+
+`repr existing` 是视图，不是构造 API。也就是说，`FillView.Solid(...)` 不是默认
+可用的构造器。你仍然按原库的方式创建数据，只用 Lux 枚举声明描述它的形状。
+
+## fallback 和 `_`
+
+`_` 是兜底分支。它可以用于接受未知外部值，也可以用于把将来新增的枚举成员先走
+保守逻辑。
+
+<LuxLuaPair title="兜底分支">
+
+```lux
+fn drawModeName(mode) =
+  match mode {
+    DrawMode.Fill => "fill"
+    DrawMode.Stroke => "stroke"
+    _ => "unknown"
+  }
+```
+
+```lua
+local function drawModeName(mode)
+  local __subject = mode
+
+  if __subject == DrawMode.Fill then
+    return "fill"
+  elseif __subject == DrawMode.Stroke then
+    return "stroke"
+  else
+    return "unknown"
+  end
+end
+```
+
+</LuxLuaPair>
+
+如果编译器已经证明前面的分支覆盖了所有枚举成员，后面的 `_` 会被诊断为不可达。
+反过来，如果没有 `_` 且缺少枚举成员，`match` 会报告非穷尽。
+
+## `match` 的检查规则
+
+`match` 检查器会重点报告三类问题：
+
+- 非穷尽：枚举成员没有全部处理，且没有兜底分支。
+- 不可达：某个分支已经被前面的分支覆盖。
+- 已证明多余的兜底：所有成员都已覆盖，`_` 永远不会命中。
+
+<LuxLuaPair title="非穷尽 match">
+
+```lux
+enum Side repr string {
+  Client = "client",
+  Server = "server",
+  Shared = "shared",
+}
+
+fn shortName(side) =
+  match side {
+    Side.Client => "cl"
+    Side.Server => "sv"
+  }
+```
+
+```lua
+-- 编译期诊断：
+-- error[MATCH_NON_EXHAUSTIVE]:
+-- match over enum `Side` does not cover `Side.Shared`
+```
+
+</LuxLuaPair>
+
+MVP 里，`match` 主要面向枚举和字面量分发，不是完整的类型系统。它不会替你证明任意
+业务对象的所有形状；对于动态外部数据，仍要在进入 `match` 前做必要的校验。
+
+## 和运行域的关系
+
+枚举声明本身也遵守模块与运行域规则。写在 `sv_` part 里的枚举默认是 server-only；
+写在 `cl_` part 里的枚举默认是 client-only；写在 `sh_` 或 shared 目录中的枚举默认
+是 shared。
+
+导出枚举时不能扩大它的运行域：
+
+<LuxLuaPair title="枚举导出不能扩大运行域" luxLabel="Lux" luaLabel="编译期诊断">
+
+```lux
+server runtime enum ServerState repr string {
+  Ready = "ready",
+}
+
+export shared { ServerState } -- error：server-only 不能导出成 shared
+```
+
+```text
+error[REALM_EXPORT_EXPANDS]:
+server-only binding `ServerState` cannot be exported as shared
+```
+
+</LuxLuaPair>
+
+shared 枚举可以收窄导出为 server 或 client，这和普通绑定的导出规则一致。

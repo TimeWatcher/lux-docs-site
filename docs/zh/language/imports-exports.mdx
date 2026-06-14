@@ -1,0 +1,501 @@
+---
+title: 导入与导出
+description: Lux 的命名导入、命名空间导入、副作用导入、导出映射、别名和运行域收窄。
+---
+
+# 导入与导出
+
+Lux 的导入导出是编译期模块系统，不是 Lua 运行时 `require`。编译器会先解析完整
+模块图，再由目标后端生成加载代码。对 GMod 后端来说，导入通常会变成对编译器生成
+的模块注册表读取，而不是直接调用 `require`。
+
+## 导入形式
+
+命名导入会从目标模块的导出表中取出公开名，并绑定到当前 part 的局部变量。
+
+<LuxLuaPair title="命名导入和别名" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+import { arr } from "@lux/std"
+import { dict as tableDict } from "@lux/std"
+
+local names = arr.map(players, (player) => player:Nick())
+local merged = tableDict.merge(defaults, overrides)
+```
+
+```lua
+local __lux_std = __lux_import("@lux/std")
+local arr = __lux_std.arr
+local tableDict = __lux_std.dict
+
+local names = arr.map(players, function(player)
+  return player:Nick()
+end)
+local merged = tableDict.merge(defaults, overrides)
+```
+
+</LuxLuaPair>
+
+命名空间导入绑定的是整个导出表。
+
+<LuxLuaPair title="命名空间导入" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+import * as std from "@lux/std"
+
+local names = std.arr.map(players, (player) => player:Nick())
+```
+
+```lua
+local std = __lux_import("@lux/std")
+
+local names = std.arr.map(players, function(player)
+  return player:Nick()
+end)
+```
+
+</LuxLuaPair>
+
+副作用导入不创建本地绑定，只保证目标模块进入模块图并按顺序执行。
+
+<LuxLuaPair title="副作用导入" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+import "@lux/ui/register_defaults"
+```
+
+```lua
+__lux_import("@lux/ui/register_defaults")
+```
+
+</LuxLuaPair>
+
+宏导入只在编译期可用，不会进入运行时模块图。
+
+<LuxLuaPair title="宏导入" luxLabel="Lux" luaLabel="生成效果">
+
+```lux
+import macro { dbg } from "@lux/macros"
+import macro * as gmodMacros from "@lux/gmod/macros"
+```
+
+```lua
+-- import macro 不生成运行时 Lua。
+-- 它只让 luxc 在编译期找到 `dbg` 和 `gmodMacros.*`。
+```
+
+</LuxLuaPair>
+
+## 路径解析
+
+相对路径引用项目模块，以 `@` 开头的路径引用包。
+
+<LuxLuaPair title="项目模块和包模块" luxLabel="Lux" luaLabel="解析后含义">
+
+```lux
+import { formatItem } from "../inventory"
+import { theme } from "./theme"
+import { valid } from "@lux/gmod"
+```
+
+```lua
+local formatItem = __lux_import("inventory").formatItem
+local theme = __lux_import("current/module/theme").theme
+local valid = __lux_import("@lux/gmod").valid
+```
+
+</LuxLuaPair>
+
+实际模块 id 由项目 `source_root`、当前模块路径、包根和后端规则共同决定。文档中的
+Lua 只展示形态，不要求手写这些 id。
+
+## 导入绑定是不可变的
+
+导入后得到的是当前 part 的局部绑定，并且不可重新赋值。
+
+<LuxLuaPair title="导入绑定不可赋值" luxLabel="Lux" luaLabel="编译期诊断">
+
+```lux
+import { arr } from "@lux/std"
+
+arr = {}
+```
+
+```lua
+-- error[BINDING_ASSIGN_CONST]:
+-- imported binding `arr` is immutable
+```
+
+</LuxLuaPair>
+
+如果要在多个 part 使用同一个包，每个 part 自己写导入。导入不会自动变成模块级
+共享绑定。
+
+## 导出是公开名映射
+
+顶层声明默认私有。导出不是“取消 private”，而是从内部绑定到外部 API 名称的显式
+映射。
+
+<LuxLuaPair title="导出同名公开 API" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+local player_inventory = {}
+
+export { player_inventory }
+```
+
+```lua
+local player_inventory = {}
+
+__lux_exports.player_inventory = player_inventory
+```
+
+</LuxLuaPair>
+
+外部模块可以导入这个公开名。
+
+<LuxLuaPair title="导入公开名" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+import { player_inventory } from "../inventory"
+```
+
+```lua
+local player_inventory = __lux_import("../inventory").player_inventory
+```
+
+</LuxLuaPair>
+
+使用别名时，公开名发生变化。`export { public_name = local_binding }` 的左侧是外部
+可见名称，右侧是模块内部绑定。
+
+<LuxLuaPair title="Lua 风格导出别名" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+local player_inventory = {}
+
+export { p_inv = player_inventory }
+```
+
+```lua
+local player_inventory = {}
+
+__lux_exports.p_inv = player_inventory
+```
+
+</LuxLuaPair>
+
+外部只能使用公开名 `p_inv`，不能再导入内部名 `player_inventory`。
+
+<LuxLuaPair title="导入别名后的公开名" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+import { p_inv } from "../inventory"
+import { p_inv as inventory } from "../inventory"
+```
+
+```lua
+local __inventory = __lux_import("../inventory")
+local p_inv = __inventory.p_inv
+local inventory = __inventory.p_inv
+```
+
+</LuxLuaPair>
+
+Lux 也支持接近常见模块系统的别名方向：
+
+<LuxLuaPair title="as 风格导出别名" luxLabel="Lux" luaLabel="等价生成 Lua">
+
+```lux
+export { player_inventory as p_inv }
+```
+
+```lua
+__lux_exports.p_inv = player_inventory
+```
+
+</LuxLuaPair>
+
+两种写法等价：
+
+```text
+export { public_name = local_binding }
+export { local_binding as public_name }
+```
+
+文档和团队规范推荐固定使用一种风格，避免同一项目中混用导致误读。
+
+## 声明时导出
+
+可以在声明时导出简单名字。`export fn` 先创建普通模块私有绑定，再把它映射到同名
+公开 API。
+
+<LuxLuaPair title="声明时导出" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+export fn createInventory(owner) {
+  { owner = owner, items = {} }
+}
+
+export const maxSlots = 64
+```
+
+```lua
+local function createInventory(owner)
+  return {
+    owner = owner,
+    items = {},
+  }
+end
+
+local maxSlots = 64
+
+__lux_exports.createInventory = createInventory
+__lux_exports.maxSlots = maxSlots
+```
+
+</LuxLuaPair>
+
+GLua 风格的点号/冒号声明不能用 `export fn`，因为它不是模块私有绑定，而是对已有
+表路径的副作用声明。
+
+<LuxLuaPair title="不能导出方法路径声明" luxLabel="Lux" luaLabel="编译期诊断">
+
+```lux
+export fn PANEL:Paint(w, h) {}
+```
+
+```lua
+-- error[EXPORT_INVALID_DECL]:
+-- `export fn` requires a simple module binding name
+```
+
+</LuxLuaPair>
+
+## 运行域导出
+
+导出可以带运行域。导出的运行域决定外部模块在哪些产物中能看见这个 API。
+
+<LuxLuaPair title="运行域导出" luxLabel="Lux" luaLabel="生成 Lua 形态">
+
+```lux
+server fn grantItem(player, item) {
+  inventory[player:SteamID64()] = item
+}
+
+client fn openPanel() {
+  vgui.Create("DFrame")
+}
+
+shared fn itemName(item) =
+  item.name ?? "Unknown"
+
+export server { grantItem }
+export client { openPanel }
+export shared { itemName }
+```
+
+```lua
+-- server artifact
+local function grantItem(player, item)
+  inventory[player:SteamID64()] = item
+end
+__lux_exports.grantItem = grantItem
+
+-- client artifact
+local function openPanel()
+  vgui.Create("DFrame")
+end
+__lux_exports.openPanel = openPanel
+
+-- shared/server and shared/client artifacts
+local function itemName(item)
+  return item.name ~= nil and item.name or "Unknown"
+end
+__lux_exports.itemName = itemName
+```
+
+</LuxLuaPair>
+
+声明时也可以写运行域导出。
+
+<LuxLuaPair title="声明时运行域导出" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+export server fn grantItem(player, item) {
+  inventory[player:SteamID64()] = item
+}
+
+export client fn openPanel() {
+  vgui.Create("DFrame")
+}
+```
+
+```lua
+-- server artifact
+local function grantItem(player, item)
+  inventory[player:SteamID64()] = item
+end
+__lux_exports.grantItem = grantItem
+
+-- client artifact
+local function openPanel()
+  vgui.Create("DFrame")
+end
+__lux_exports.openPanel = openPanel
+```
+
+</LuxLuaPair>
+
+如果导出没有显式运行域，默认使用绑定的有效运行域。`sv_` 文件中的 `export fn`
+默认是服务端导出；`cl_` 文件中默认是客户端导出；共享文件中默认是共享导出。
+
+## 只能收窄，不能扩大
+
+导出的运行域必须是绑定可用运行域的子集。
+
+<LuxLuaPair title="server-only 不能导出成 shared" luxLabel="Lux" luaLabel="编译期诊断">
+
+```lux
+server fn grantItem(player, item) {
+  inventory[player:SteamID64()] = item
+}
+
+export shared { grantItem }
+export client { grantItem }
+export server { grantItem }
+```
+
+```lua
+-- export shared { grantItem }
+-- error[REALM_EXPORT_EXPANDS]:
+-- server-only binding `grantItem` cannot be exported as shared
+
+-- export client { grantItem }
+-- error[REALM_EXPORT_EXPANDS]:
+-- server-only binding `grantItem` cannot be exported as client
+
+-- export server { grantItem }
+-- ok
+```
+
+</LuxLuaPair>
+
+共享绑定可以收窄导出。这表示函数本身可在共享代码中使用，但对外只作为服务端 API
+暴露。
+
+<LuxLuaPair title="shared 绑定可收窄导出" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+shared fn normalizeName(value) =
+  string.Trim(value ?? "")
+
+export server { normalizeName }
+```
+
+```lua
+local function normalizeName(value)
+  if value == nil then
+    value = ""
+  end
+
+  return string.Trim(value)
+end
+
+__lux_exports.normalizeName = normalizeName -- server artifact only
+```
+
+</LuxLuaPair>
+
+## 导出限制
+
+MVP 规则：
+
+- 只能导出模块作用域绑定。
+- 不能导出从其他模块导入的绑定。
+- 公开名参与重复导出检查。
+- 运行域导出不能扩大绑定的实际可用运行域。
+- 未通过公开名导出的内部名保持私有。
+
+不能直接转导入绑定。
+
+<LuxLuaPair title="不能转导入绑定" luxLabel="Lux" luaLabel="编译期诊断">
+
+```lux
+import { arr } from "@lux/std"
+
+export { arr }
+```
+
+```lua
+-- error[EXPORT_IMPORTED_BINDING]:
+-- imported binding `arr` cannot be exported from this module
+```
+
+</LuxLuaPair>
+
+需要转发 API 时，先定义自己的包装。
+
+<LuxLuaPair title="用包装函数转发 API" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+import { arr } from "@lux/std"
+
+fn mapItems(items, callback) =
+  arr.map(items, callback)
+
+export { mapItems }
+```
+
+```lua
+local arr = __lux_import("@lux/std").arr
+
+local function mapItems(items, callback)
+  return arr.map(items, callback)
+end
+
+__lux_exports.mapItems = mapItems
+```
+
+</LuxLuaPair>
+
+## public all
+
+`public all` 是显式选择“全部公开”的模块级配置，适合非常小的工具模块。
+
+<LuxLuaPair title="public all" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+public all
+
+fn clamp(value, min, max) {
+  value < min then min else value > max then max else value
+}
+
+fn lerp(t, from, to) {
+  from + (to - from) * t
+}
+```
+
+```lua
+local function clamp(value, min, max)
+  if value < min then
+    return min
+  elseif value > max then
+    return max
+  else
+    return value
+  end
+end
+
+local function lerp(t, from, to)
+  return from + (to - from) * t
+end
+
+__lux_exports.clamp = clamp
+__lux_exports.lerp = lerp
+```
+
+</LuxLuaPair>
+
+大型模块不要依赖 `public all`。默认私有、按名称导出更利于维护 API 边界。

@@ -1,0 +1,336 @@
+---
+title: Enums and Match
+description: Scalar enums, runtime enums, table enums, existing views, fallback branches, exhaustiveness checks, and realm-aware enum exports.
+---
+
+# Enums and Match
+
+Lux enums are designed for two different jobs:
+
+- scalar enums give names to stable primitive values;
+- table enums model tagged values that carry fields.
+
+`match` uses the enum shape to produce direct Lua comparisons while still giving
+the compiler enough information to report missing cases.
+
+## Scalar Enums Are Zero-runtime by Default
+
+A scalar enum with a numeric representation lowers to numbers. No runtime enum
+table is required unless you explicitly ask for one.
+
+<LuxLuaPair title="number enum compiles to numeric comparisons" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+enum FillKind repr number {
+  Solid = 0,
+  Linear = 1,
+  Radial = 2,
+}
+
+local mode = match kind {
+  FillKind.Solid => "solid"
+  FillKind.Linear => "linear"
+  FillKind.Radial => "radial"
+}
+```
+
+```lua
+local mode
+local __lux_match_1 = kind
+if __lux_match_1 == 0 then
+  mode = "solid"
+elseif __lux_match_1 == 1 then
+  mode = "linear"
+elseif __lux_match_1 == 2 then
+  mode = "radial"
+end
+```
+
+</LuxLuaPair>
+
+String-backed scalar enums lower to string comparisons.
+
+<LuxLuaPair title="string enum compiles to string comparisons" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+enum DockMode repr string {
+  Left = "left",
+  Right = "right",
+}
+
+local side = match dock {
+  DockMode.Left => 0
+  DockMode.Right => 1
+}
+```
+
+```lua
+local side
+local __lux_match_1 = dock
+if __lux_match_1 == "left" then
+  side = 0
+elseif __lux_match_1 == "right" then
+  side = 1
+end
+```
+
+</LuxLuaPair>
+
+Use scalar enums when the value needs to cross net messages, files, convars, or
+plain GLua APIs.
+
+## Runtime Scalar Enums
+
+`runtime` asks Lux to emit a table for reflection or external API compatibility.
+
+<LuxLuaPair title="runtime enum can be exported" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+export runtime enum HudState repr string {
+  Hidden = "hidden",
+  Compact = "compact",
+  Full = "full",
+}
+```
+
+```lua
+local HudState = {
+  Hidden = "hidden",
+  Compact = "compact",
+  Full = "full",
+}
+
+__lux_exports.HudState = HudState
+```
+
+</LuxLuaPair>
+
+The `runtime` marker can also appear after the representation if that reads
+better with surrounding declarations.
+
+<LuxLuaPair title="runtime postfix form" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+enum Channel repr number runtime {
+  System = 0,
+  User = 1,
+}
+```
+
+```lua
+local Channel = {
+  System = 0,
+  User = 1,
+}
+```
+
+</LuxLuaPair>
+
+Without `runtime`, scalar enum member names are compile-time names only.
+
+## Table Enums
+
+Table enums create tagged tables. Use them when each case has different data.
+
+<LuxLuaPair title="table enum constructors" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+enum DrawCommand repr table {
+  Rect { x, y, w, h, color }
+  Text { x, y, text, font }
+}
+
+local cmd = DrawCommand.Rect {
+  x = 0,
+  y = 0,
+  w = 100,
+  h = 20,
+  color = Color(255, 255, 255),
+}
+```
+
+```lua
+local DrawCommand = {}
+
+function DrawCommand.Rect(fields)
+  fields.__tag = "Rect"
+  return fields
+end
+
+function DrawCommand.Text(fields)
+  fields.__tag = "Text"
+  return fields
+end
+
+local cmd = DrawCommand.Rect({
+  x = 0,
+  y = 0,
+  w = 100,
+  h = 20,
+  color = Color(255, 255, 255),
+})
+```
+
+</LuxLuaPair>
+
+Matching a table enum narrows the fields available in each branch.
+
+<LuxLuaPair title="table enum match" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+match cmd {
+  DrawCommand.Rect { x, y, w, h, color } => {
+    draw.RoundedBox(0, x, y, w, h, color)
+  }
+  DrawCommand.Text { x, y, text, font } => {
+    draw.SimpleText(text, font, x, y)
+  }
+}
+```
+
+```lua
+local __lux_match_1 = cmd
+if __lux_match_1.__tag == "Rect" then
+  local x = __lux_match_1.x
+  local y = __lux_match_1.y
+  local w = __lux_match_1.w
+  local h = __lux_match_1.h
+  local color = __lux_match_1.color
+  draw.RoundedBox(0, x, y, w, h, color)
+elseif __lux_match_1.__tag == "Text" then
+  local x = __lux_match_1.x
+  local y = __lux_match_1.y
+  local text = __lux_match_1.text
+  local font = __lux_match_1.font
+  draw.SimpleText(text, font, x, y)
+end
+```
+
+</LuxLuaPair>
+
+The default table tag key is compiler-owned. Code should construct values
+through the generated constructors instead of writing tags by hand.
+
+## Existing Views
+
+An `existing` view describes externally-created values without generating
+constructors. This is useful for GMod or third-party tables that already carry a
+stable tag field.
+
+<LuxLuaPair title="existing view creates no constructors" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+enum NetMessage repr existing table tag "kind" {
+  Inventory { itemId, count }
+  Chat { text }
+}
+
+match msg {
+  NetMessage.Inventory { itemId, count } => addItem(itemId, count)
+  NetMessage.Chat { text } => chat.AddText(text)
+}
+```
+
+```lua
+local __lux_match_1 = msg
+if __lux_match_1.kind == "Inventory" then
+  local itemId = __lux_match_1.itemId
+  local count = __lux_match_1.count
+  addItem(itemId, count)
+elseif __lux_match_1.kind == "Chat" then
+  local text = __lux_match_1.text
+  chat.AddText(text)
+end
+```
+
+</LuxLuaPair>
+
+`existing` views are type-level knowledge for the compiler; they do not change
+the source tables.
+
+## Fallback and `_`
+
+Use `_` for a fallback branch when the value space is open or when you
+intentionally do not handle every case.
+
+<LuxLuaPair title="Fallback branch" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+local label = match state {
+  HudState.Hidden => "hidden"
+  HudState.Compact => "compact"
+  _ => "other"
+}
+```
+
+```lua
+local label
+local __lux_match_1 = state
+if __lux_match_1 == "hidden" then
+  label = "hidden"
+elseif __lux_match_1 == "compact" then
+  label = "compact"
+else
+  label = "other"
+end
+```
+
+</LuxLuaPair>
+
+Fallback branches should be used deliberately. When matching a closed enum,
+leaving out a case without `_` is usually a bug.
+
+## `match` Checking Rules
+
+Lux checks `match` at compile time when the matched value has an enum
+availability. Missing cases are diagnostics unless a fallback branch exists.
+
+<LuxLuaPair title="Non-exhaustive match" luxLabel="Lux" luaLabel="Diagnostic">
+
+```lux
+enum Tab repr string {
+  Home = "home",
+  Settings = "settings",
+  Profile = "profile",
+}
+
+local title = match tab {
+  Tab.Home => "Home"
+  Tab.Settings => "Settings"
+}
+```
+
+```text
+error[MATCH_NON_EXHAUSTIVE]:
+match over enum `Tab` does not cover `Tab.Profile`
+```
+
+</LuxLuaPair>
+
+For scalar enums, branches compare the underlying scalar value. For table enums,
+branches compare the tag and then bind fields.
+
+## Realms and Enums
+
+Enum declarations have realms like other bindings. Exporting an enum cannot
+make it available in a wider realm than the enum binding itself.
+
+<LuxLuaPair title="Enum export cannot expand realms" luxLabel="Lux" luaLabel="Diagnostic">
+
+```lux
+server enum ServerOnly repr string {
+  Grant = "grant",
+}
+
+export shared { ServerOnly }
+```
+
+```text
+error[EXPORT_REALM_EXPANDS_BINDING]:
+exported realms `shared` are not a subset of binding realms `server`
+```
+
+</LuxLuaPair>
+
+Shared scalar enums are often the right shape for network protocol constants.
+Server-only or client-only enums are better for local implementation state.

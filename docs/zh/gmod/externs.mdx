@@ -1,0 +1,176 @@
+---
+title: GMod API 与 extern
+description: 已知 API、未知外部符号、源码 extern、配置 extern 和严格模式。
+---
+
+# GMod API 与 extern
+
+Lux 会对常见 GMod API 做运行域检查，但 GMod 插件生态不可能被完整静态建模。动态
+全局、第三方插件、二进制模块和运行时注册模式都可能引入编译器不知道的符号。
+
+因此 Lux 使用三级可用性模型：
+
+```text
+Lux 绑定       严格检查
+已知 GMod API  严格检查
+未知外部符号    默认允许并警告
+```
+
+未知外部符号不会被归类为 `shared`。它在内部是单独的 `UnknownExternal`，含义是
+“编译器无法验证”，不是“已经证明安全”。
+
+## 默认行为
+
+迁移真实项目时，默认策略是 `warn`：
+
+```toml
+[target.gmod.realm]
+unknown_external = "warn"
+```
+
+遇到未知外部符号时，编译器继续构建，但报告风险：
+
+```text
+warning[REALM_UNKNOWN]:
+cannot verify realm availability of external symbol `ThirdPartyAddon`
+used in shared context inside `run`
+
+Add an extern declaration to make this strict:
+  extern shared ThirdPartyAddon
+  extern client ThirdPartyAddon
+  extern server ThirdPartyAddon
+```
+
+警告按 `(symbol_path, active_realm, containing_decl_binding_id)` 去重。同一个函数里重复
+使用同一未知符号不会刷屏；同一符号在共享函数和服务端函数里会分别报告，因为风险
+不同。
+
+## 策略等级
+
+```toml
+[target.gmod.realm]
+unknown_external = "allow"
+```
+
+```text
+allow  允许未知外部符号，不报告
+warn   允许未知外部符号，报告 warning
+error  未知外部符号直接构建失败
+```
+
+建议迁移期用 `warn`，稳定后在 CI 使用 `error`。`allow` 只适合临时实验或噪音尚未
+整理的历史项目。
+
+## 源码 extern
+
+在源码中声明外部符号运行域。`extern` 不生成运行时代码，只把符号纳入严格检查。
+
+<LuxLuaPair title="源码 extern" luxLabel="Lux" luaLabel="检查含义">
+
+```lux
+extern server ThirdPartyAddon
+extern client FancyHud.Open
+extern shared SharedLibrary
+```
+
+```lua
+-- ThirdPartyAddon -> server-only
+-- FancyHud.Open   -> client-only
+-- SharedLibrary   -> shared
+-- extern 声明本身不生成运行时 Lua。
+```
+
+</LuxLuaPair>
+
+声明后，这些符号会进入严格检查。比如 `extern server ThirdPartyAddon` 表示它只能在
+服务端运行域使用。
+
+## 成员级 extern
+
+很多 API 不是整个全局表都属于同一个运行域，而是成员不同。
+
+<LuxLuaPair title="成员级 extern 最长路径优先" luxLabel="Lux" luaLabel="检查含义">
+
+```lux
+extern shared net
+extern server net.Start
+extern server net.Send
+extern client net.Receive
+```
+
+```lua
+-- net.Start   -> server-only
+-- net.Send    -> server-only
+-- net.Receive -> client-only
+-- net.* 其他成员回退到 shared
+```
+
+</LuxLuaPair>
+
+匹配时使用最长路径优先。`net.Start` 会优先匹配 `extern server net.Start`，而不是
+回退到 `extern shared net`。
+
+这对第三方库也一样。
+
+<LuxLuaPair title="第三方库成员级 extern" luxLabel="Lux" luaLabel="检查含义">
+
+```lux
+extern shared MyLib
+extern server MyLib.SaveData
+extern client MyLib.OpenPanel
+```
+
+```lua
+-- MyLib.SaveData  -> server-only
+-- MyLib.OpenPanel -> client-only
+-- MyLib.* 其他成员回退到 shared
+```
+
+</LuxLuaPair>
+
+## 配置 extern
+
+团队项目更适合把第三方符号集中写进 `lux.toml`：
+
+```toml
+[target.gmod.extern]
+ThirdPartyAddon = "server"
+SharedLibrary = "shared"
+net.Start = "server"
+net.Receive = "client"
+```
+
+带点号的路径也可以使用结构化表：
+
+```toml
+[target.gmod.extern."FancyHud.Open"]
+realm = "client"
+```
+
+这两种写法等价；结构化表适合以后扩展更多字段。
+
+## 已知 API 覆盖范围
+
+Lux 会逐步维护常用 GMod API 数据，但不会承诺完全覆盖整个 GMod Wiki 和插件生态。
+不在已知数据库内、也不是 Lux 代码定义的符号，会按未知外部符号处理。
+
+这意味着：
+
+- 默认不会阻止你使用真实项目里的第三方全局。
+- 编译器会告诉你它无法验证运行域，风险由项目承担。
+- 添加 `extern` 后，后续使用会变成严格检查。
+
+## 何时写 extern
+
+应该写：
+
+- 第三方插件提供的全局表或方法。
+- 二进制模块提供的全局函数。
+- 项目运行时通过 GLua 注册、但 Lux 无法静态看到的符号。
+- 已知 GMod API 数据尚未覆盖的常用函数。
+
+不应该写：
+
+- Lux 模块导出的绑定；它们已经严格检查。
+- 同模块 part 内部的私有函数；它们属于 Lux 绑定。
+- 只是为了压掉真实运行域错误的错误声明。

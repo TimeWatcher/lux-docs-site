@@ -1,0 +1,152 @@
+---
+title: 从 GLua 迁移
+description: 用 Lux module 替换手写 include、global API 和运行时 SERVER/CLIENT 分支。
+---
+
+# 从 GLua 迁移
+
+迁移到 Lux 不应该是逐行改写。优先把手写加载顺序、全局 API 和运行时
+`SERVER` / `CLIENT` 分支移进 Lux 的模块和运行域模型。
+
+## 用 import 替换 loader
+
+老 GLua 常从手写顺序开始。Lux 源码应该表达依赖，GMod 后端会根据模块图生成 loader。
+
+<LuxLuaPair title="加载顺序迁移" luxLabel="旧 GLua" luaLabel="Lux 写法">
+
+```lua
+AddCSLuaFile("cl_panel.lua")
+include("shared.lua")
+include("sv_store.lua")
+```
+
+```lux
+import { formatItem } from "../inventory"
+import { panelTheme } from "./theme"
+```
+
+</LuxLuaPair>
+
+生成 loader 会负责 `include`、`AddCSLuaFile` 和运行域文件分发。开发者不再维护一个
+容易和源码结构脱节的 loader 文件。
+
+## 用运行域块替换 `if SERVER`
+
+GLua 常把运行域代码混在一个 callback 里。Lux 保留这个代码形状，但显式表达运行域。
+
+<LuxLuaPair title="运行域迁移" luxLabel="旧 GLua" luaLabel="Lux 写法">
+
+```lua
+function ENT:Initialize()
+  self:SetNoDraw(true)
+
+  if SERVER then
+    self:PhysicsInitBox(Vector(-20, -20, 0), Vector(20, 20, 86))
+  end
+end
+```
+
+```lux
+fn ENT:Initialize() {
+  self:SetNoDraw(true);
+
+  server {
+    self:PhysicsInitBox(Vector(-20, -20, 0), Vector(20, 20, 86));
+  }
+}
+```
+
+</LuxLuaPair>
+
+`server { ... }` 只会进入服务端产物。块外的 shared 代码仍然不能调用 server-only API。
+
+<LuxLuaPair title="运行域块生成形态" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+fn ENT:Initialize() {
+  self:SetNoDraw(true)
+
+  server {
+    self:PhysicsInitBox(Vector(-20, -20, 0), Vector(20, 20, 86))
+  }
+}
+```
+
+```lua
+-- server artifact
+function ENT:Initialize()
+  self:SetNoDraw(true)
+  self:PhysicsInitBox(Vector(-20, -20, 0), Vector(20, 20, 86))
+end
+
+-- client artifact
+function ENT:Initialize()
+  self:SetNoDraw(true)
+end
+```
+
+</LuxLuaPair>
+
+## 拆分大文件为 part
+
+不要因为一个文件太大就硬拆 package。相关文件放在同一个 module 目录：
+
+```text
+console/
+  module.lux
+  cl_commands.lux
+  cl_status.lux
+  cl_install.lux
+```
+
+所有 part 文件共享 module-private 顶层声明。只有非函数顶层初始化需要特定顺序时，
+才使用 `part order`。
+
+<LuxLuaPair title="part 顺序" luxLabel="Lux" luaLabel="生成效果">
+
+```lux
+part order { "module", "cl_commands", "cl_status", "cl_install" }
+```
+
+```lua
+-- part order 不生成运行时代码。
+-- 它决定 console 模块内部 part 合并顺序。
+```
+
+</LuxLuaPair>
+
+## 缩小 public API
+
+顶层声明默认 private。导出是从内部绑定到公开名的显式映射。
+
+<LuxLuaPair title="公开名映射" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+local player_inventory = {}
+
+export { p_inv = player_inventory }
+```
+
+```lua
+local player_inventory = {}
+
+__lux_exports.p_inv = player_inventory
+```
+
+</LuxLuaPair>
+
+其他 module import 公开名。
+
+<LuxLuaPair title="导入公开名" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+import { p_inv as inventory } from "../inventory"
+```
+
+```lua
+local inventory = __lux_import("../inventory").p_inv
+```
+
+</LuxLuaPair>
+
+内部名 `player_inventory` 仍保持 private。

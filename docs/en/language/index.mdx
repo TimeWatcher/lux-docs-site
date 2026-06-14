@@ -1,0 +1,170 @@
+---
+title: Language Overview
+description: Core Lux syntax for functions, blocks, modules, imports, realms, macros, host transforms, and generated Lua.
+---
+
+# Language Overview
+
+Lux is a Lua 5.1 / GLua superset for GMod development. It keeps Lua's direct
+imperative style while moving module loading, public APIs, realm checks, macros,
+and host transforms into the compiler.
+
+Examples use the code switcher in the top-right corner. Read the Lux source,
+then switch to generated Lua to see the runtime shape.
+
+<div className="lux-stage">
+  <div><strong>Parse</strong><span>syntax, macros, and host transform hooks</span></div>
+  <div><strong>Resolve</strong><span>module directories, part files, imports, and exports</span></div>
+  <div><strong>Check</strong><span>realms, externs, ordering, and public API rules</span></div>
+  <div><strong>Emit</strong><span>Lua artifacts, loaders, source maps, and diagnostics</span></div>
+</div>
+
+## A Complete Small Example
+
+This client HUD snippet shows the main Lux style: explicit imports, small
+functions, enums, `match`, guards, arrow callbacks, template strings, and
+explicit exports.
+
+<LuxLuaPair title="Client HUD snippet" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+import { arr } from "@lux/std"
+
+enum Tier repr number {
+  Guest = 0,
+  Regular = 1,
+  Veteran = 2,
+}
+
+fn tierForExp(exp) {
+  stopif exp == nil, Tier.Guest
+  stopif exp < 5, Tier.Guest
+  stopif exp < 25, Tier.Regular
+  Tier.Veteran
+}
+
+client fn drawPlayerList(players) {
+  local names = arr.map(players, (ply) => {
+    local tier = tierForExp(ply:GetNWInt("lux_exp"))
+    local label = match tier {
+      Tier.Guest => "guest"
+      Tier.Regular => "regular"
+      Tier.Veteran => "veteran"
+    }
+    `${ply:Nick()} (${label})`
+  })
+
+  draw.SimpleText(table.concat(names, ", "), "DermaDefault", 16, 16)
+}
+
+export client { drawPlayerList }
+```
+
+```lua
+local arr = __lux_import("@lux/std").arr
+
+local function tierForExp(exp)
+  if exp == nil then
+    return 0
+  end
+  if exp < 5 then
+    return 0
+  end
+  if exp < 25 then
+    return 1
+  end
+  return 2
+end
+
+local function drawPlayerList(players)
+  local names = arr.map(players, function(ply)
+    local tier = tierForExp(ply:GetNWInt("lux_exp"))
+    local label
+    if tier == 0 then
+      label = "guest"
+    elseif tier == 1 then
+      label = "regular"
+    elseif tier == 2 then
+      label = "veteran"
+    end
+    return tostring(ply:Nick()) .. " (" .. tostring(label) .. ")"
+  end)
+
+  draw.SimpleText(table.concat(names, ", "), "DermaDefault", 16, 16)
+end
+
+__lux_exports.drawPlayerList = drawPlayerList
+```
+
+</LuxLuaPair>
+
+## Core Feature Checklist
+
+Lux adds syntax and compiler behavior in a few focused areas:
+
+- `fn` declarations with expression bodies, block bodies, default parameters,
+  implicit tail returns, and top-level function hoisting.
+- Guard statements such as `stopif` and `stopifn` for early returns and loop
+  control.
+- Arrow functions for short callbacks and method-friendly callback assignment.
+- Optional access and `??` for nil-safe expression composition without losing
+  `false`.
+- Destructuring, table spread, compound assignment, pipelines, `do`
+  expressions, and template strings.
+- Directory modules made from multiple part files that share one module-private
+  scope.
+- Explicit import/export syntax where exported names form the public API.
+- Realm-aware declarations and blocks for `client`, `server`, and `shared`
+  GMod artifacts.
+- Scalar and table enums with checked `match` expressions.
+- Compile-time macros and host transforms for domain-specific lowering.
+
+## Relationship to Lua
+
+Lux is not trying to hide Lua. Generated code is intended to be readable enough
+for stack traces, code review, and debugging in a live GMod server.
+
+The compiler follows these principles:
+
+- preserve Lua evaluation order;
+- emit direct functions, tables, branches, and loops where possible;
+- avoid generated closures for ordinary `match` and conditional expressions;
+- keep source maps and optional source comments usable;
+- report deterministic diagnostics before generating Lua that GMod would reject.
+
+When Lux syntax maps to a tricky Lua rule, the docs show both sides in the same
+code block switcher.
+
+## Terms Used in the Docs
+
+`module`: a logical Lux module, usually a directory under the source root.
+
+`part`: one `.lux` file inside a module. All parts in a module share module
+scope, but imports are part-local.
+
+`realm`: one of `client`, `server`, or `shared`. Realms affect availability,
+imports, exports, and generated artifacts.
+
+`exported name`: the public API name visible to other modules.
+
+`binding`: the internal module-scope name created by a declaration.
+
+`extern`: a declaration or config entry that tells Lux the realm of an external
+symbol outside Lux's known module graph.
+
+`host transform`: a package-provided compile-time rewrite attached to imports
+from a specific runtime module.
+
+## Reading Order
+
+Read the language reference in this order:
+
+1. [Functions and Control Flow](/language/functions-control)
+2. [Modules and Parts](/language/modules)
+3. [Imports and Exports](/language/imports-exports)
+4. [Realms](/language/realms)
+5. [Enums and Match](/language/enums-match)
+6. [Macros and Host Transforms](/language/macros-host)
+
+Then move to [GMod backend](/gmod/) and [Generated Lua](/reference/generated-lua)
+to understand how Lux projects become addon artifacts.

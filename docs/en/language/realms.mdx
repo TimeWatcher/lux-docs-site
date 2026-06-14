@@ -1,0 +1,324 @@
+---
+title: Realms
+description: Client, server, shared, realm-marked declarations, realm blocks, imports, externs, and unknown external policy.
+---
+
+# Realms
+
+Lux treats GMod realms as part of the language. `client`, `server`, and
+`shared` are not just output folders; they affect name availability, imports,
+exports, generated artifacts, and diagnostics.
+
+The goal is to remove manual `if SERVER then AddCSLuaFile(...) end` loader
+plumbing while still catching code that would call the wrong API in the wrong
+artifact.
+
+## Realm Sources
+
+A declaration's default realm comes from the part file:
+
+```text
+cl_*.lux        client
+sv_*.lux        server
+sh_*.lux        shared
+client/**/*.lux client
+server/**/*.lux server
+shared/**/*.lux shared
+unmarked files shared
+```
+
+If a prefix conflicts with the nearest realm directory, compilation fails. For
+example, `server/cl_panel.lux` is ambiguous and rejected.
+
+## Realm-marked Declarations
+
+You can mark declarations explicitly. The marker works with exported and
+private declarations.
+
+<LuxLuaPair title="Realm-marked declarations" luxLabel="Lux" luaLabel="Generated Lua shape">
+
+```lux
+server fn grantItem(ply, id) {
+  giveItem(ply, id)
+}
+
+client fn openInventoryPanel() {
+  vgui.Create("LuxInventoryPanel")
+}
+```
+
+```lua
+-- server artifact
+local function grantItem(ply, id)
+  return giveItem(ply, id)
+end
+
+-- client artifact
+local function openInventoryPanel()
+  return vgui.Create("LuxInventoryPanel")
+end
+```
+
+</LuxLuaPair>
+
+The marker is not tied to `export`. A private server helper is still server-only.
+
+<LuxLuaPair title="Private realm helper and public export" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+server fn grantInternal(ply, itemId) {
+  giveItem(ply, itemId)
+}
+
+export server { grant = grantInternal }
+```
+
+```lua
+local function grantInternal(ply, itemId)
+  return giveItem(ply, itemId)
+end
+
+__lux_exports.grant = grantInternal
+```
+
+</LuxLuaPair>
+
+Top-level declarations default to the importer part's effective realm unless an
+explicit marker narrows or changes them.
+
+## Realm Blocks
+
+Realm blocks express fine-grained client/server sections inside otherwise
+shared code. They are the Lux replacement for GLua's repeated `if SERVER then`
+or `if CLIENT then` blocks.
+
+<LuxLuaPair title="Realm blocks" luxLabel="Lux" luaLabel="Generated Lua shape">
+
+```lux
+fn ENT:Initialize() {
+  self:DrawShadow(false)
+  self:SetNoDraw(true)
+
+  server {
+    self:PhysicsInitBox(Vector(-20, -20, 0), Vector(20, 20, 86))
+  }
+
+  self:SetCustomCollisionCheck(true)
+}
+```
+
+```lua
+function ENT:Initialize()
+  self:DrawShadow(false)
+  self:SetNoDraw(true)
+
+  if SERVER then
+    self:PhysicsInitBox(Vector(-20, -20, 0), Vector(20, 20, 86))
+  end
+
+  self:SetCustomCollisionCheck(true)
+end
+```
+
+</LuxLuaPair>
+
+The server block is checked as server-only code. The surrounding function may
+still be shared.
+
+## Shared Does Not Mean Every Line Is Shared
+
+Shared files often contain server-only setup and client-only UI pieces. The rule
+is not "a shared file can never mention server APIs"; the rule is "shared
+context cannot use a server-only value unless the use is inside a server-only
+context."
+
+<LuxLuaPair title="Fine-grained realms inside a shared function" luxLabel="Lux" luaLabel="Generated Lua shape">
+
+```lux
+fn ENT:Initialize() {
+  self:SetCustomCollisionCheck(true)
+
+  server {
+    local phys = self:GetPhysicsObject()
+    if phys:IsValid() {
+      phys:EnableMotion(false)
+    }
+  }
+
+  client {
+    self:SetRenderBounds(Vector(-20, -20, 0), Vector(20, 20, 86))
+  }
+}
+```
+
+```lua
+function ENT:Initialize()
+  self:SetCustomCollisionCheck(true)
+
+  if SERVER then
+    local phys = self:GetPhysicsObject()
+    if phys:IsValid() then
+      phys:EnableMotion(false)
+    end
+  end
+
+  if CLIENT then
+    self:SetRenderBounds(Vector(-20, -20, 0), Vector(20, 20, 86))
+  end
+end
+```
+
+</LuxLuaPair>
+
+Realm blocks are also useful inside macro expansions and host transforms because
+they make the intended availability explicit.
+
+## Import Checks
+
+An imported binding carries the export realms of the source module. The checker
+compares that availability to the active use-site realm.
+
+<LuxLuaPair title="server-only import can only be used in server context" luxLabel="Lux" luaLabel="Check result">
+
+```lux
+import { grant } from "inventory"
+
+fn sharedTick(ply) {
+  grant(ply, "coin")
+}
+```
+
+```text
+error[REALM_MISMATCH]:
+server-only import `grant` is used in shared context inside `sharedTick`
+```
+
+</LuxLuaPair>
+
+Move the use into a server declaration or a server block.
+
+<LuxLuaPair title="Server function in a shared file" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+import { grant } from "inventory"
+
+server fn grantCoin(ply) {
+  grant(ply, "coin")
+}
+```
+
+```lua
+local grant = __lux_import("inventory").grant
+
+local function grantCoin(ply)
+  return grant(ply, "coin")
+end
+```
+
+</LuxLuaPair>
+
+The file can still be `sh_module.lux`; the function itself is server-only.
+
+## External API Availability
+
+Lux uses three availability categories:
+
+```text
+Lux symbol       -> strict
+known GMod API   -> strict
+unknown external -> allow + warning by default
+```
+
+Internally, unknown external symbols are not treated as shared. They keep a
+separate availability:
+
+```text
+RealmAvailability =
+  Known(shared | client | server)
+  | UnknownExternal
+```
+
+Known realm mismatch is an error. Unknown external use is allowed with a warning
+by default because real GMod addons often use dynamic globals, third-party
+libraries, and binary modules that Lux cannot fully know.
+
+The default warning looks like this:
+
+```text
+warning[REALM_UNKNOWN]:
+cannot verify realm availability of external symbol `ThirdPartyAddon`
+used in shared context inside `run`
+
+Add an extern declaration to make this strict:
+  extern shared ThirdPartyAddon
+  extern client ThirdPartyAddon
+  extern server ThirdPartyAddon
+```
+
+Projects can choose how strict unknown externals should be:
+
+```toml
+[target.gmod.realm]
+unknown_external = "warn" # allow | warn | error
+```
+
+`warn` is the default. `error` is useful for CI once a project has declared its
+externs.
+
+## Extern Declarations
+
+Use `extern` when Lux should know the realm of an external symbol.
+
+<LuxLuaPair title="Source extern" luxLabel="Lux" luaLabel="Generated effect">
+
+```lux
+extern server ThirdPartyAddon
+
+server fn runAddon() {
+  ThirdPartyAddon.Start()
+}
+```
+
+```text
+The checker treats ThirdPartyAddon as server-only.
+No runtime Lua is emitted for the extern declaration.
+```
+
+</LuxLuaPair>
+
+Member-level extern declarations support APIs whose root table is shared but
+individual members are realm-specific.
+
+<LuxLuaPair title="Member-level extern" luxLabel="Lux" luaLabel="Check meaning">
+
+```lux
+extern shared net
+extern server net.Start
+extern client net.Receive
+```
+
+```text
+The checker matches the longest path first:
+net.Start   -> server
+net.Receive -> client
+net         -> shared
+```
+
+</LuxLuaPair>
+
+Package-level externs belong in `lux.toml` when a team wants declarations in one
+place.
+
+```toml
+[target.gmod.extern]
+ThirdPartyAddon = "server"
+FancyHud = "client"
+SharedLibrary = "shared"
+
+[target.gmod.extern."ThirdPartyAddon.DoSomething"]
+realm = "server"
+```
+
+Lux ships common GMod API realm data, but it cannot fully cover the whole addon
+ecosystem. Unknown external use remains allowed by default with a warning; if
+you ignore that warning, you are accepting the runtime risk yourself.

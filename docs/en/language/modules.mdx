@@ -1,0 +1,291 @@
+---
+title: Modules and Parts
+description: Module directories, part files, shared module scope, part-local imports, hoisting, deterministic initialization, entry parts, and part order.
+---
+
+# Modules and Parts
+
+A Lux module is a directory-level unit, not a single file. Every `.lux` part
+file under the module directory contributes to one logical module scope.
+
+This is the central difference from the old package system: developers split a
+module by concern and realm, while the compiler owns discovery, realm routing,
+loading, and generated Lua layout.
+
+```text
+inventory/
+  module.lux
+  sv_store.lux
+  cl_panel.lux
+  sh_items.lux
+```
+
+All four files above are one module named `inventory`.
+
+## Module Scope
+
+Top-level declarations in any part create module-private bindings. Those
+bindings are visible to every other part in the same module, subject to realm
+checks.
+
+<LuxLuaPair title="Cross-part private binding" luxLabel="Lux parts" luaLabel="Merged Lua">
+
+```lux
+// sh_items.lux
+fn normalizeItemId(id) tostring(id)
+
+// sv_store.lux
+server fn grantItem(ply, id) {
+  local normalized = normalizeItemId(id)
+  giveItem(ply, normalized)
+}
+```
+
+```lua
+local normalizeItemId
+local grantItem
+
+function normalizeItemId(id)
+  return tostring(id)
+end
+
+function grantItem(ply, id)
+  local normalized = normalizeItemId(id)
+  return giveItem(ply, normalized)
+end
+```
+
+</LuxLuaPair>
+
+`normalizeItemId` is not exported, but it is still visible inside the module.
+Export controls external API only; it does not affect internal visibility.
+
+## Imports Are Part-local
+
+Top-level imports are local to the part file that declares them. They do not
+become module-wide bindings.
+
+<LuxLuaPair title="Part-local import" luxLabel="Lux part" luaLabel="Generated Lua">
+
+```lux
+// cl_panel.lux
+import { arr } from "@lux/std"
+
+client fn renderNames(players) {
+  arr.map(players, (ply) => ply:Nick())
+}
+```
+
+```lua
+local arr = __lux_import("@lux/std").arr
+
+local function renderNames(players)
+  return arr.map(players, function(ply)
+    return ply:Nick()
+  end)
+end
+```
+
+</LuxLuaPair>
+
+If `sv_store.lux` also needs `arr`, it imports `arr` itself. This rule keeps
+part dependencies visible at the top of each file and prevents a later part from
+silently depending on imports from an earlier part.
+
+## Function Hoisting
+
+Simple top-level `fn` declarations are hoisted across the whole module. This is
+why part files can call each other without artificial numeric filenames.
+
+<LuxLuaPair title="Function hoisting across parts" luxLabel="Lux parts" luaLabel="Generated Lua">
+
+```lux
+// cl_install.lux
+client fn installPanel() {
+  registerPanel(buildPanel)
+}
+
+// cl_panel.lux
+client fn buildPanel() {
+  vgui.Create("DPanel")
+}
+```
+
+```lua
+local installPanel
+local buildPanel
+
+function installPanel()
+  return registerPanel(buildPanel)
+end
+
+function buildPanel()
+  return vgui.Create("DPanel")
+end
+```
+
+</LuxLuaPair>
+
+Only simple function bindings are hoisted. Declarations with side-effectful
+initializers are not moved.
+
+## Top-level Initialization
+
+Top-level non-function locals are initialized in deterministic part order. They
+are module-private and visible across parts after initialization, but using them
+before initialization is an error.
+
+<LuxLuaPair title="Top-level values initialize in part order" luxLabel="Lux parts" luaLabel="Generated Lua order">
+
+```lux
+// module.lux
+part order { "module", "sh_items", "sv_store" }
+
+local defaults = loadDefaults()
+
+// sv_store.lux
+server local store = createStore(defaults)
+```
+
+```lua
+local defaults
+local store
+
+defaults = loadDefaults()
+store = createStore(defaults)
+```
+
+</LuxLuaPair>
+
+If `module.lux` read `store` before `sv_store.lux` initializes it, Lux reports a
+use-before-initialization diagnostic instead of relying on runtime `nil`
+behavior.
+
+## Entry Parts
+
+A multi-file module must have exactly one entry part. The entry gives developers
+a stable place to start reading the module and gives the compiler a stable place
+for module-level metadata.
+
+Valid entry part names are:
+
+```text
+module.lux
+cl_module.lux
+sv_module.lux
+sh_module.lux
+```
+
+Single-file modules do not need an entry part. A multi-file module without an
+entry is a compile error.
+
+## Part Order
+
+Complete part order belongs in the entry part.
+
+<LuxLuaPair title="Complete part order" luxLabel="Entry part" luaLabel="Generated effect">
+
+```lux
+part order {
+  "module",
+  "sh_items",
+  "sv_store",
+  "cl_panel",
+}
+```
+
+```text
+The compiler merges parts in this order before initialization lowering.
+The declaration emits no runtime Lua by itself.
+```
+
+</LuxLuaPair>
+
+`before` and `after` constraints are allowed as auxiliary ordering hints, but a
+complete `part order` is the right tool when you need to fully choreograph a
+module.
+
+<LuxLuaPair title="Local part constraints" luxLabel="Current part" luaLabel="Generated effect">
+
+```lux
+part after "sh_items"
+part before "cl_install"
+```
+
+```text
+The current part is placed after sh_items and before cl_install.
+The compiler reports cycles or ambiguous short names.
+```
+
+</LuxLuaPair>
+
+Lux rejects duplicate part entries, references to missing parts, ambiguous short
+names, and ordering cycles.
+
+## Duplicate Bindings
+
+MVP 0.1 rejects duplicate module-scope binding names, even if the declarations
+are in different files or different realms.
+
+<LuxLuaPair title="Duplicate internal binding names are errors" luxLabel="Lux" luaLabel="Diagnostic">
+
+```lux
+// sv_store.lux
+server fn refresh() {}
+
+// cl_panel.lux
+client fn refresh() {}
+```
+
+```text
+error[MODULE_BINDING_DUPLICATE]:
+module binding `refresh` is declared more than once
+```
+
+</LuxLuaPair>
+
+Use distinct internal names and export aliases when you want the public API to
+look uniform.
+
+<LuxLuaPair title="Shape public API with export aliases" luxLabel="Lux" luaLabel="Generated Lua">
+
+```lux
+server fn refreshServer() {}
+client fn refreshClient() {}
+
+export server { refresh = refreshServer }
+export client { refresh = refreshClient }
+```
+
+```lua
+-- server artifact
+__lux_exports.refresh = refreshServer
+
+-- client artifact
+__lux_exports.refresh = refreshClient
+```
+
+</LuxLuaPair>
+
+## Do Not Import Same-module Parts
+
+Part files in the same module already share module scope. Importing a sibling
+part by path is a design error because it turns internal organization into a
+public dependency.
+
+<LuxLuaPair title="Same-module parts do not need imports" luxLabel="Lux" luaLabel="Diagnostic">
+
+```lux
+// cl_panel.lux inside inventory/
+import { normalizeItemId } from "inventory/sh_items"
+```
+
+```text
+error[MODULE_PART_IMPORT]:
+do not import a part of the current module; use the module-private binding directly
+```
+
+</LuxLuaPair>
+
+If another module needs a binding, export it from the module API and import the
+module, not one of its part files.

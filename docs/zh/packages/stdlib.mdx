@@ -1,0 +1,129 @@
+---
+title: 标准库
+description: @lux/std、@lux/gmod、少分配 API 和命名约定。
+---
+
+# 标准库
+
+Lux 标准库有意保持很小。它不会改写 `table`、`string`、`math` 或 GMod 全局表，
+也不提供链式包装对象。你显式导入需要的模块，生成 Lua 时它们会变成普通局部变量。
+
+## `@lux/std`
+
+`@lux/std` 是纯 Lua/GLua 可用的工具包，不依赖 GMod 全局。
+
+- `arr`：稠密一基数组。
+- `dict`：键值表。
+- `set`：布尔集合表。
+- `str`：字符串工具。
+- `num`：数字工具。
+- `func`：小函数工具。
+- `pool`：表复用工具。
+
+<LuxLuaPair title="@lux/std 导入与使用" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+import { arr, dict } from "@lux/std"
+
+local names = arr.map(players, (player) => player:Nick())
+local merged = dict.merge(defaults, overrides)
+```
+
+```lua
+local __lux_std = __lux_import("@lux/std")
+local arr = __lux_std.arr
+local dict = __lux_std.dict
+
+local names = arr.map(players, function(player)
+  return player:Nick()
+end)
+local merged = dict.merge(defaults, overrides)
+```
+
+</LuxLuaPair>
+
+## 少分配 API
+
+简单名 API 通常会分配新表，适合一次性转换和非热路径。
+
+<LuxLuaPair title="分配新表的简单 API" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+local mapped = arr.map(xs, (x) => x + 1)
+```
+
+```lua
+local mapped = arr.map(xs, function(x)
+  return x + 1
+end)
+```
+
+</LuxLuaPair>
+
+以 `Into` 或 `InPlace` 结尾的 API 复用调用方提供的表，适合 HUD 绘制、`Think`
+hook、VGUI layout 这类每帧路径。
+
+<LuxLuaPair title="复用输出表" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+arr.mapInto(xs, (x) => x + 1, out)
+arr.removeWhereInPlace(xs, (x) => x == nil)
+dict.mergeInto(out, defaults, overrides)
+```
+
+```lua
+arr.mapInto(xs, function(x)
+  return x + 1
+end, out)
+
+arr.removeWhereInPlace(xs, function(x)
+  return x == nil
+end)
+
+dict.mergeInto(out, defaults, overrides)
+```
+
+</LuxLuaPair>
+
+## `@lux/gmod`
+
+`@lux/gmod` 是 GMod 专用工具包，可以使用 `IsValid`、`hook`、`timer`、`net`、
+`util`、`player`、`ents`、`Color` 和 `vgui` 等全局。
+
+- `valid`
+- `hookx`
+- `timerx`
+- `netx`
+- `json`
+- `players`
+- `entsx`
+- `color`
+- `vgui`
+
+<LuxLuaPair title="@lux/gmod 导入与使用" luxLabel="Lux" luaLabel="生成 Lua">
+
+```lux
+import { valid, hookx, players } from "@lux/gmod"
+
+hookx.add("Think", "my_addon.tick", () => {
+  local out = {}
+  players.aliveInto(out)
+})
+```
+
+```lua
+local __lux_gmod = __lux_import("@lux/gmod")
+local valid = __lux_gmod.valid
+local hookx = __lux_gmod.hookx
+local players = __lux_gmod.players
+
+hookx.add("Think", "my_addon.tick", function()
+  local out = {}
+  players.aliveInto(out)
+end)
+```
+
+</LuxLuaPair>
+
+`netx.register` 内部使用 `server { ... }` 运行域块，所以 `util.AddNetworkString`
+只会进入服务端产物。

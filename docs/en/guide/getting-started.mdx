@@ -1,0 +1,224 @@
+---
+title: Getting Started
+description: Install prerequisites, compile a single file, create a GMod project, build artifacts, run diagnostics, and map Lua errors back to Lux.
+---
+
+# Getting Started
+
+This guide walks through the smallest useful Lux workflow: compile one file,
+write a multi-part module, then build a GMod addon layout.
+
+## Requirements
+
+Lux currently targets Lua 5.1 / GLua. For local development you need:
+
+- Rust toolchain for building `luxc` from this repository.
+- Node.js only for the documentation site.
+- A Garry's Mod addon directory when testing generated artifacts in game.
+
+Build the compiler from the repository root:
+
+```powershell
+cargo build
+```
+
+Run the compiler directly during development:
+
+```powershell
+cargo run -- --help
+```
+
+Or use the compiled binary:
+
+```powershell
+target\debug\luxc.exe --help
+```
+
+## Compile One File
+
+Start with a single file:
+
+```text
+examples/
+  hello.lux
+```
+
+```powershell
+cargo run -- compile examples\hello.lux
+```
+
+Single-file compilation is useful for checking syntax, generated Lua shape, and
+small language examples. GMod projects normally use `luxc gmod build` so the
+compiler can discover modules, split realms, and emit loaders.
+
+## Write a First Module
+
+Create a module directory. A multi-file module needs an entry part.
+
+```text
+src/
+  inventory/
+    module.lux
+    sv_store.lux
+    cl_panel.lux
+```
+
+The entry part is where the public module shape and part order are easiest to
+find.
+
+<LuxLuaPair title="Entry part" luxLabel="Lux: module.lux" luaLabel="Generated Lua shape">
+
+```lux
+part order { "module", "sv_store", "cl_panel" }
+
+fn normalizeItemId(id) tostring(id)
+
+export { normalizeItemId }
+```
+
+```lua
+local function normalizeItemId(id)
+  return tostring(id)
+end
+
+__lux_exports.normalizeItemId = normalizeItemId
+```
+
+</LuxLuaPair>
+
+Server parts can use the private function from the entry part without importing
+it. All parts in the same module share module-private scope.
+
+<LuxLuaPair title="Server part" luxLabel="Lux: sv_store.lux" luaLabel="server artifact">
+
+```lux
+server fn grantItem(ply, itemId) {
+  local normalized = normalizeItemId(itemId)
+  print(`grant ${normalized} to ${ply:Nick()}`)
+}
+
+export server { grantItem }
+```
+
+```lua
+local function grantItem(ply, itemId)
+  local normalized = normalizeItemId(itemId)
+  return print("grant " .. tostring(normalized) .. " to " .. tostring(ply:Nick()))
+end
+
+__lux_exports.grantItem = grantItem
+```
+
+</LuxLuaPair>
+
+Client parts can expose client-only UI without leaking it into the server
+artifact.
+
+<LuxLuaPair title="Client part" luxLabel="Lux: cl_panel.lux" luaLabel="client artifact">
+
+```lux
+client fn openInventoryPanel() {
+  local panel = vgui.Create("DFrame")
+  panel:SetTitle("Inventory")
+  panel:MakePopup()
+}
+
+export client { openInventoryPanel }
+```
+
+```lua
+local function openInventoryPanel()
+  local panel = vgui.Create("DFrame")
+  panel:SetTitle("Inventory")
+  panel:MakePopup()
+end
+
+__lux_exports.openInventoryPanel = openInventoryPanel
+```
+
+</LuxLuaPair>
+
+The module has one public API, but each exported name is available only in the
+realm where it is valid.
+
+## Create a GMod Project
+
+Create `lux.toml` at the addon root:
+
+```toml
+[gmod]
+package_id = "my_addon"
+bundle_id = "my_addon"
+source_root = "src"
+addon_root = "."
+generated_root = "generated"
+source_comments = "readable"
+```
+
+Recommended layout:
+
+```text
+my_addon/
+  lux.toml
+  src/
+    inventory/
+      module.lux
+      sv_store.lux
+      cl_panel.lux
+  generated/
+    lua/
+      autorun/
+      lux/
+```
+
+Build GMod artifacts:
+
+```powershell
+cargo run -- gmod build --manifest lux.toml
+```
+
+The build step discovers modules under `source_root`, infers realms from file
+prefixes and folders, resolves package imports, emits Lua artifacts under
+`generated_root`, and writes generated loader files.
+
+## Build from Explicit Paths
+
+For experiments and CI slices, you can build from explicit source and addon
+paths:
+
+```powershell
+cargo run -- gmod build --source-root src --addon-root . --generated-root generated
+```
+
+Use a manifest for real projects. It keeps package ids, output roots, source map
+settings, and extern policy in one stable place.
+
+## Check and Format
+
+Run linting without emitting artifacts:
+
+```powershell
+cargo run -- lint src\inventory\module.lux
+```
+
+Format a file:
+
+```powershell
+cargo run -- format src\inventory\module.lux
+```
+
+Format whole project sources through your editor or a script until the CLI grows
+full project formatting commands.
+
+## Map Runtime Errors
+
+GMod reports Lua stack traces. Lux emits source maps so you can map generated
+Lua locations back to Lux source.
+
+```powershell
+cargo run -- map-error generated\lua\lux\client\my_addon\inventory.lua:42:9
+```
+
+With readable source comments enabled, generated Lua also contains source
+anchors around functions and branch blocks. Use `source_comments = "none"` for
+production-sized artifacts and sidecar source maps for debugging.
