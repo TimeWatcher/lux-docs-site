@@ -2,6 +2,7 @@
   "name": "lux-docs-site",
   "version": "1.0.0",
   "private": true,
+  "license": "MIT OR Apache-2.0",
   "type": "module",
   "scripts": {
     "build": "rspress build",

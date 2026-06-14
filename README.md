@@ -98,5 +98,16 @@ npm run preview -- --host 127.0.0.1 --port 4174
 
 ## License
 
-No license file has been added yet. Treat this repository as source-available
-until a license is chosen.
+The documentation site uses a split license model:
+
+- Site source code, theme components, examples, and build scripts are licensed
+  under `MIT OR Apache-2.0`.
+- Documentation prose is licensed under `CC-BY-4.0`.
+- Code examples and generated-code snippets inside documentation are licensed
+  under `MIT OR Apache-2.0`.
+- The Lux name, logo, icon, and other branding assets are not licensed for
+  reuse by these open source licenses.
+
+See [LICENSE](LICENSE), [LICENSE-MIT](LICENSE-MIT),
+[LICENSE-APACHE](LICENSE-APACHE), [LICENSE-DOCS](LICENSE-DOCS), and
+[NOTICE](NOTICE).
