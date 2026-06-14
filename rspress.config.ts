@@ -56,7 +56,7 @@ export default defineConfig({
       {
         icon: 'github',
         mode: 'link',
-        content: 'https://github.com/',
+        content: 'https://github.com/TimeWatcher/lux',
       },
     ],
   },

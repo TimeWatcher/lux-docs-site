@@ -29,10 +29,10 @@ features:
     details: Exports map private module bindings to public names; imports resolve against those names before code generation.
     icon: E
     link: /language/imports-exports
-  - title: Strong syntax highlighting
-    details: Lux code blocks use a dedicated grammar and stable token palette, not the site brand color.
-    icon: H
-    link: /language/
+  - title: Modern GLua syntax
+    details: Guard statements, optional access, nil coalescing, destructuring, table spread, pipelines, do expressions, and template strings compile back to ordinary Lua.
+    icon: S
+    link: /language/functions-control
   - title: Package phases
     details: Runtime, macro, and host code live in Lux packages under convention-based directories.
     icon: P
