@@ -2,8 +2,11 @@ import * as path from 'node:path';
 import { defineConfig } from '@rspress/core';
 import { luxLanguage } from './theme/luxLanguage';
 
+const base = process.env.GITHUB_PAGES === 'true' ? '/lux-docs-site/' : '/';
+
 export default defineConfig({
   root: path.join(__dirname, 'docs'),
+  base,
   title: 'Lux',
   description: 'Lux language and GLua toolchain documentation.',
   lang: 'en',
