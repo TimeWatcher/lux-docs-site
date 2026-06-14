@@ -105,6 +105,9 @@ The documentation site uses a split license model:
 - Documentation prose is licensed under `CC-BY-4.0`.
 - Code examples and generated-code snippets inside documentation are licensed
   under `MIT OR Apache-2.0`.
+- Documentation about MGFX describes a separately licensed package: MGFX is
+  licensed for non-commercial use only, and commercial use requires a separate
+  written license from the copyright holder.
 - The Lux name, logo, icon, and other branding assets are not licensed for
   reuse by these open source licenses.
 
