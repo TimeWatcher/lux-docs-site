@@ -32,6 +32,7 @@ export default defineConfig({
   markdown: {
     defaultWrapCode: true,
     globalComponents: [
+      path.join(__dirname, 'theme/LuxHome.tsx'),
       path.join(__dirname, 'theme/LuxLuaPair.tsx'),
     ],
     shiki: {
