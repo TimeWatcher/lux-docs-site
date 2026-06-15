@@ -1,0 +1,84 @@
+# VS Code And LSP
+
+Lux editor support is provided by the `lux-vscode` extension and the `lux-lsp` language server. The extension is intentionally thin: it starts the server, contributes grammar and commands, and displays server results. Lux module resolution, realm checks, import/export completion, hover, diagnostics, and GMod API intelligence come from the compiler analysis API and `gmod-api-db`.
+
+## Install
+
+Download the latest `lux-vscode-*.vsix` from [Lux LSP releases](https://github.com/TimeWatcher/lux-lsp/releases), then install it in VS Code:
+
+```powershell
+code --install-extension .\lux-vscode-0.1.0.vsix
+```
+
+Release VSIX builds include precompiled `lux-lsp` binaries. If you use a local development build, either put `lux-lsp` on `PATH` or set:
+
+```json
+{
+  "lux.lsp.serverPath": "C:\\Tools\\lux\\lux-lsp.exe"
+}
+```
+
+## Server Resolution
+
+The extension starts `lux-lsp` in this order:
+
+1. `lux.lsp.serverPath`
+2. bundled `server/<platform>/lux-lsp`
+3. `lux-lsp` on `PATH`
+4. `cargo run -p lux-lsp`, only when `lux.lsp.developmentCargoFallback` is enabled
+
+The cargo fallback is for language-server development. Normal users should use the release VSIX or an explicit server binary.
+
+## Compiler Commands
+
+Commands that build or update data call `luxc`. The extension resolves `luxc` from:
+
+1. `lux.compiler.path`
+2. bundled extension binaries when available
+3. `luxc` on `PATH`
+
+Useful commands:
+
+- `Lux: Compile Current Project`
+- `Lux: Update Garry's Mod API Database`
+- `Lux: Format Document`
+- `Lux: Show Module Exports`
+- `Lux: Show Active Realm`
+- `Lux: Show GMod API Coverage`
+
+## Editor Intelligence
+
+The current server supports:
+
+- diagnostics from parser, resolver, formatter, module graph, realm checks, and imports
+- import source completion
+- import specifier completion filtered by exported names and active realm
+- export list completion from module-scope bindings
+- GMod API root/member completion
+- method completion from inferred receiver facts such as `LocalPlayer()` and `vgui.Create("DButton")`
+- hover for Lux bindings, exports, imports, known GMod APIs, hooks, and official docs
+- signature help for functions, methods, and hook callbacks
+- definition across files in a multi-part module
+- semantic tokens for Lux syntax and known/unknown external symbols
+- formatting through the compiler formatter
+
+## Quick Fixes
+
+Lux quick fixes come from compiler analysis and LSP server data:
+
+- add source-level `extern`
+- add package-level extern to `lux.toml`
+- wrap realm-specific code in `client { ... }` or `server { ... }`
+- narrow an invalid export realm
+- open official GMod documentation for realm mismatches
+- format the current document when formatter diagnostics are emitted
+
+Unknown external symbols are never treated as shared-safe. They are tracked as `UnknownExternal` and reported according to `target.gmod.realm.unknown_external`.
+
+## Official GMod API Data
+
+`gmod-api-db` is generated from the official Facepunch pagelist and per-page JSON. It contains document records for every official page and a structured API index for functions, hooks, classes, panels, constants, enums, and realms.
+
+This is a release requirement, not a convenience cache: the bundled database must prove `document_page_count == official_page_count`, `structured_page_count == api_candidate_count`, `fallback_page_count == 0`, and `failed_page_count == 0`. Manual data is allowed only as test fixtures or traceable override patches after official generation.
+
+The VS Code extension consumes this through `lux-lsp`; it does not maintain its own API table.

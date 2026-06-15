@@ -1,0 +1,84 @@
+# VS Code 与 LSP
+
+Lux 的编辑器支持由 `lux-vscode` 扩展和 `lux-lsp` language server 提供。扩展本身保持很薄：负责启动 server、贡献语法和命令、展示 server 返回结果。Lux module resolution、realm 检查、import/export completion、hover、diagnostics 和 GMod API 智能都来自 compiler analysis API 与 `gmod-api-db`。
+
+## 安装
+
+从 [Lux LSP releases](https://github.com/TimeWatcher/lux-lsp/releases) 下载最新的 `lux-vscode-*.vsix`，然后在 VS Code 中安装：
+
+```powershell
+code --install-extension .\lux-vscode-0.1.0.vsix
+```
+
+正式发布的 VSIX 会内置预编译 `lux-lsp`。如果你使用本地开发构建，需要把 `lux-lsp` 放到 `PATH`，或者显式配置：
+
+```json
+{
+  "lux.lsp.serverPath": "C:\\Tools\\lux\\lux-lsp.exe"
+}
+```
+
+## Server 查找顺序
+
+扩展启动 `lux-lsp` 的顺序是：
+
+1. `lux.lsp.serverPath`
+2. VSIX 内置的 `server/<platform>/lux-lsp`
+3. `PATH` 中的 `lux-lsp`
+4. 只有启用 `lux.lsp.developmentCargoFallback` 时，才执行 `cargo run -p lux-lsp`
+
+cargo fallback 只用于开发 language server。普通用户应该使用 release VSIX 或显式 server binary。
+
+## Compiler 命令
+
+构建和数据更新命令会调用 `luxc`。扩展查找 `luxc` 的顺序是：
+
+1. `lux.compiler.path`
+2. 扩展内置 binary，如果发布包包含
+3. `PATH` 中的 `luxc`
+
+常用命令：
+
+- `Lux: Compile Current Project`
+- `Lux: Update Garry's Mod API Database`
+- `Lux: Format Document`
+- `Lux: Show Module Exports`
+- `Lux: Show Active Realm`
+- `Lux: Show GMod API Coverage`
+
+## 编辑器智能
+
+当前 server 支持：
+
+- parser、resolver、formatter、module graph、realm 检查和 import 诊断
+- import source completion
+- 根据 exported name 和 active realm 过滤的 import specifier completion
+- 基于 module-scope binding 的 export list completion
+- GMod API root/member completion
+- 基于 `LocalPlayer()`、`vgui.Create("DButton")` 等事实推断的 method completion
+- Lux binding、export、import、已知 GMod API、hook 和官方文档 hover
+- function、method、hook callback signature help
+- multi-part module 跨文件 definition
+- Lux 语法、known external、unknown external 的 semantic tokens
+- 通过 compiler formatter 格式化文档
+
+## Quick Fixes
+
+Lux quick fixes 来自 compiler analysis 和 LSP server 数据：
+
+- 添加源码级 `extern`
+- 向 `lux.toml` 添加 package-level extern
+- 用 `client { ... }` 或 `server { ... }` 包装 realm-specific 代码
+- 收窄无效的 export realm
+- 为 realm mismatch 打开 GMod 官方文档
+- 当 formatter 报告诊断时格式化当前文档
+
+未知外部符号不会被当成 shared-safe。它们会以 `UnknownExternal` 独立跟踪，并根据 `target.gmod.realm.unknown_external` 报告。
+
+## 官方 GMod API 数据
+
+`gmod-api-db` 从 Facepunch 官方 pagelist 和单页 JSON 生成。它为每个官方页面生成 document record，并为 function、hook、class、panel、constant、enum 和 realm 生成结构化 API 索引。
+
+这是发布门槛，不只是方便缓存：bundled database 必须证明 `document_page_count == official_page_count`、`structured_page_count == api_candidate_count`、`fallback_page_count == 0`、`failed_page_count == 0`。手写数据只能作为测试 fixture，或作为官方生成后叠加的、可追溯 override patch。
+
+VS Code 扩展通过 `lux-lsp` 使用这些数据；扩展自身不维护 API 表。
