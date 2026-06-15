@@ -22,9 +22,9 @@ compiletime/  macro/helper Lux，由 luxc 离线执行
 host/         host transform Lux，由 luxc 离线执行
 ```
 
-一个 package 可以组合多个 phase。`@lux/ui` 同时有 runtime code 和 host
-transform。`@lux/macros` 暴露 compile-time macro。runtime package code
-不会被写死在 Rust codegen 里。
+一个 package 可以组合多个 phase。`@lux/ui` 目前是面向语法变形的中间层，带有 host
+transform，但还不是具体 UI 后端。`@lux/macros` 暴露 compile-time macro。runtime
+package code 不会被写死在 Rust codegen 里。
 
 ## Built-in packages
 
@@ -32,7 +32,6 @@ transform。`@lux/macros` 暴露 compile-time macro。runtime package code
 - `@lux/gmod`
 - `@lux/reactive`
 - `@lux/ui`
-- `@lux/mgfx`
 - `@lux/macros`
 - `@lux/gmod/macros`
 - `@lux/compile/macro`
@@ -41,12 +40,16 @@ transform。`@lux/macros` 暴露 compile-time macro。runtime package code
 项目 package root 通过 `lux.toml` 的 `package_roots` 添加。内置 package
 先加载，重复 package id 会报错。
 
+外部 package set，包括 MGFX，通过 `luxc install` 按项目安装。package set 可以来自
+GitHub archive、zip URL 或本地路径；多层依赖由 package set 的 source hint 自动解析，
+并写入 `lux.lock`。
+
 ## Package 内的 module part
 
 package phase 目录也使用同一套 module part model：
 
 ```text
-packages/lux/mgfx/widgets/src/
+packages/vendor/widgets/src/
   module.lux
   cl_base.lux
   cl_progress.lux

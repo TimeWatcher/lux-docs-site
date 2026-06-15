@@ -5,15 +5,21 @@ description: Lux 版 MGFX 渲染 package 及其独立文档入口。
 
 # MGFX
 
-MGFX 是面向 Garry's Mod immediate UI effects 的 Lux 渲染 package。它通过 Lux
-package 集合作为 `@lux/mgfx` 分发，并在独立文档站中维护完整说明：
+MGFX 是面向 Garry's Mod immediate UI effects 的 Lux 渲染 package。它通过独立的
+`lux-mgfx` package set 分发，并在独立文档站中维护完整说明：
 
 - [MGFX 中文文档](https://timewatcher.github.io/mgfx-docs-site/zh/)
+- [MGFX package 仓库](https://github.com/TimeWatcher/lux-mgfx)
 - [MGFX 文档仓库](https://github.com/TimeWatcher/mgfx-docs-site)
-- [Lux packages 仓库](https://github.com/TimeWatcher/lux-packages)
 
 当前页面只是 Lux 主站里的入口。API 细节、Shader 说明、性能模型和 Lux 版架构说明都
 以独立 MGFX 文档为准。
+
+按项目安装：
+
+```powershell
+luxc install @lux/mgfx --from github:TimeWatcher/lux-mgfx
+```
 
 ## 在 Lux 中使用
 
@@ -49,7 +55,8 @@ end
 
 `@lux/mgfx` 是 client-only package。项目导入它后，`luxc gmod build` 会编译实际依赖
 到的 module part、保持导出为客户端运行域、生成 Lua，并生成 GMod loader。Lux 项目
-不应该再复制旧 MGFX Lua autorun loader。
+安装后会从 `lux.lock` 读取对应 package root；它不再随默认 Lux package submodule
+捆绑。Lux 项目不应该再复制旧 MGFX Lua autorun loader。
 
 MGFX 也是 Lux package 设计的实际例子：一个 package 拆成 `frame`、`paint`、`style`、
 `text`、`widgets`、`materials`、`shaderpack` 等子模块；module part 共享内部作用域，

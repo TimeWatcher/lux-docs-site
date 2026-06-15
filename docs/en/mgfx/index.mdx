@@ -6,16 +6,22 @@ description: Entry point for the Lux-based MGFX rendering package and its standa
 # MGFX
 
 MGFX is the Lux rendering package for Garry's Mod immediate UI effects. It is
-distributed as `@lux/mgfx` through the Lux package set and is documented in its
+distributed as the standalone `lux-mgfx` package set and is documented in its
 own site:
 
 - [MGFX documentation](https://timewatcher.github.io/mgfx-docs-site/)
+- [MGFX package repository](https://github.com/TimeWatcher/lux-mgfx)
 - [MGFX documentation repository](https://github.com/TimeWatcher/mgfx-docs-site)
-- [Lux packages repository](https://github.com/TimeWatcher/lux-packages)
 
 This page is only the Lux-site entry point. Use the standalone MGFX
 documentation for API details, shader notes, performance guidance, and the
 Lux-based architecture.
+
+Install it per project:
+
+```powershell
+luxc install @lux/mgfx --from github:TimeWatcher/lux-mgfx
+```
 
 ## Use from Lux
 
@@ -51,8 +57,10 @@ for GLua-facing code, old panels, console demos, and gradual migration.
 
 `@lux/mgfx` is client-only. When a project imports it, `luxc gmod build`
 compiles the required module parts, keeps realm exports client-scoped, emits
-generated Lua, and generates the GMod loader. Do not copy the old MGFX Lua
-autorun loader into a Lux project.
+generated Lua, and generates the GMod loader. The package root comes from the
+project lockfile after installation; it is not bundled into the default Lux
+package submodule. Do not copy the old MGFX Lua autorun loader into a Lux
+project.
 
 MGFX is also a practical example of Lux package design: one package is split
 into submodules such as `frame`, `paint`, `style`, `text`, `widgets`,
