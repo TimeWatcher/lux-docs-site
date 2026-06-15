@@ -50,7 +50,7 @@ machines.
 
 `package_roots` is optional and normally unnecessary for installed packages.
 `lux.lock` roots are loaded automatically after `luxc install`. Use
-`package_roots` for local vendoring or package development checkouts.
+`package_roots` for local package development checkouts.
 Duplicate package ids are rejected.
 
 ## Module Discovery
@@ -174,17 +174,17 @@ by hand.
 
 ## Package Roots
 
-Package roots let projects vendor or share Lux packages:
+Package roots let projects point at local package development checkouts:
 
 ```toml
 [gmod]
-package_roots = "vendor/project-packages"
+package_roots = "local-packages"
 ```
 
 Example:
 
 ```text
-vendor/project-packages/
+local-packages/
   acme/ui/
     src/module.lux
 ```

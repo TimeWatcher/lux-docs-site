@@ -46,13 +46,24 @@ luxc install @lux/gmod --from github:TimeWatcher/lux-std --project my_addon
 ```
 
 Locked package roots are loaded automatically from `lux.lock`.
-`package_roots` in `lux.toml` is for local vendoring or package development
-checkouts. Duplicate package ids are rejected.
+`package_roots` in `lux.toml` is for local package development checkouts.
+Duplicate package ids are rejected.
 
 External package sets, including MGFX, are installed per project with `luxc
 install`. A package set can be fetched from GitHub archives, zip URLs, or local
 paths; transitive dependencies are resolved from the package set's source
 hints and recorded in `lux.lock`.
+
+Lux does not have a registry. Package ids do not imply a source or latest
+version; the dependency entry in `lux.toml` chooses a concrete source with
+`github`, `url`, or `path`. GitHub sources can be pinned with `tag`, `branch`,
+or `commit`. Package versions inside `lux.package.toml` are compatibility
+constraints for the selected package graph.
+
+`luxc lock` regenerates `lux.lock` from the manifest. It does not update or
+search for newer package versions. `luxc remove <package-id>` removes a direct
+dependency from `lux.toml` and rewrites the lockfile, pruning transitive
+packages that are no longer required.
 
 ## Module parts inside packages
 

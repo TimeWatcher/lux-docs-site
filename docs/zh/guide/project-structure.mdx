@@ -198,19 +198,19 @@ loader 文件名带 `bundle_id`，避免不同插件都生成 `lux_init.lua` 而
 ## Package 根目录
 
 通过 `luxc install` 安装的 package root 会从 `lux.lock` 自动加载。`package_roots`
-主要用于本地 vendoring 或开发中的 package checkout：
+主要用于本地 package 开发 checkout：
 
 ```toml
 [gmod]
-package_roots = "vendor/project-packages"
+package_roots = "local-packages"
 ```
 
 包内部同样使用约定目录：
 
 ```text
-vendor/project-packages/acme/ui/src/module.lux
-vendor/project-packages/acme/macros/compiletime/module.lux
-vendor/project-packages/acme/ui/host/module.lux
+local-packages/acme/ui/src/module.lux
+local-packages/acme/macros/compiletime/module.lux
+local-packages/acme/ui/host/module.lux
 ```
 
 运行时代码进入生成 Lua；编译时代码只在 `luxc` 内执行；宿主变换用于把特定领域语法

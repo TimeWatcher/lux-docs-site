@@ -45,11 +45,20 @@ luxc install @lux/gmod --from github:TimeWatcher/lux-std --project my_addon
 ```
 
 `lux.lock` 里的 package root 会自动加载。`lux.toml` 的 `package_roots` 主要用于本地
-vendoring 或开发中的 package checkout。重复 package id 会报错。
+package 开发 checkout。重复 package id 会报错。
 
 外部 package set，包括 MGFX，通过 `luxc install` 按项目安装。package set 可以来自
 GitHub archive、zip URL 或本地路径；多层依赖由 package set 的 source hint 自动解析，
 并写入 `lux.lock`。
+
+Lux 没有 registry。package id 不意味着某个默认来源或最新版本；`lux.toml` 里的依赖条目
+必须显式写 `github`、`url` 或 `path`。GitHub 来源可以再用 `tag`、`branch` 或
+`commit` 固定。`lux.package.toml` 里的 package version 只作为所选 package graph 的兼容性
+约束。
+
+`luxc lock` 只会按当前 manifest 重建 `lux.lock`，不会查找或更新新版本。`luxc remove
+<package-id>` 会从 `lux.toml` 删除直接依赖并重写 lockfile，顺带剪掉不再需要的传递
+package。
 
 ## Package 内的 module part
 

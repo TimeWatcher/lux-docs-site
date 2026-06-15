@@ -31,6 +31,8 @@ luxc lint <path>
 luxc format <path> [--check] [--write]
 luxc init [path] [--name <name>] [--std] [--template gmod-addon]
 luxc install <package-id> --from <github:owner/repo|url|path> [--tag <tag>|--branch <branch>|--commit <commit>]
+luxc remove <package-id> [--project <project-root>]
+luxc lock [project-root]
 luxc list [project-root]
 luxc doctor [project-root]
 luxc compile <path> [--map <path>] [--source-comments none|readable|boundary|dense]
@@ -109,6 +111,73 @@ luxc format src\inventory\module.lux --write
 Formatter output is intended to preserve comments and keep Lux-specific syntax
 readable. Generated Lua formatting is controlled by the emitter, not this
 command.
+
+## `init`
+
+Create a project skeleton:
+
+```powershell
+luxc init my_addon
+```
+
+Plain `init` is offline and writes an empty `[dependencies]` table. Add
+`--std` when the project should install the official standard package set:
+
+```powershell
+luxc init my_addon --std
+```
+
+## `install`
+
+Add a direct package dependency and rewrite `lux.lock`:
+
+```powershell
+luxc install @lux/gmod --from github:TimeWatcher/lux-std --project my_addon
+```
+
+Lux has no registry. The source passed with `--from` selects the package set:
+`github:owner/repo`, a zip `url`, or a local `path`. For GitHub sources, pin the
+selected package set with one of `--tag`, `--branch`, or `--commit`.
+
+## `remove`
+
+Remove a direct dependency from `lux.toml` and rewrite `lux.lock`:
+
+```powershell
+luxc remove @lux/gmod --project my_addon
+```
+
+Transitive packages disappear naturally when no remaining direct dependency
+requires them. Removing a transitive-only package is rejected because it is not
+owned by the project manifest.
+
+## `lock`
+
+Regenerate `lux.lock` from the current `lux.toml`:
+
+```powershell
+luxc lock my_addon
+```
+
+This command does not search for newer versions. With Lux's registryless model,
+version choice is the explicit source ref in the manifest; package versions in
+`lux.package.toml` are compatibility checks for the selected package graph.
+
+## `list`
+
+Print locked packages:
+
+```powershell
+luxc list my_addon
+```
+
+## `doctor`
+
+Inspect package manager state:
+
+```powershell
+luxc doctor my_addon
+```
 
 ## `compile`
 

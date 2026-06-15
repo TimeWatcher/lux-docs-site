@@ -30,6 +30,8 @@ luxc lint <path>
 luxc format <path> [--check] [--write]
 luxc init [path] [--name <name>] [--std] [--template gmod-addon]
 luxc install <package-id> --from <github:owner/repo|url|path> [--tag <tag>|--branch <branch>|--commit <commit>]
+luxc remove <package-id> [--project <project-root>]
+luxc lock [project-root]
 luxc list [project-root]
 luxc doctor [project-root]
 luxc compile <path> [--map <path>] [--source-comments [none|readable|boundary|dense]]
@@ -105,6 +107,71 @@ luxc format examples\features.lux
 ```
 
 `--check` 与 `--write` 不能同时使用。
+
+## init
+
+创建项目骨架：
+
+```powershell
+luxc init my_addon
+```
+
+普通 `init` 离线执行，只写空的 `[dependencies]`。需要官方标准 package set 时显式加
+`--std`：
+
+```powershell
+luxc init my_addon --std
+```
+
+## install
+
+添加直接 package 依赖并重写 `lux.lock`：
+
+```powershell
+luxc install @lux/gmod --from github:TimeWatcher/lux-std --project my_addon
+```
+
+Lux 没有 registry。`--from` 直接选择 package set 来源：`github:owner/repo`、zip
+`url` 或本地 `path`。GitHub 来源可以用 `--tag`、`--branch` 或 `--commit` 中的一个
+固定具体引用。
+
+## remove
+
+从 `lux.toml` 删除直接依赖并重写 `lux.lock`：
+
+```powershell
+luxc remove @lux/gmod --project my_addon
+```
+
+不再被任何直接依赖需要的传递包会自然消失。删除只有传递来源的包会报错，因为它不属于
+项目 manifest 的直接依赖。
+
+## lock
+
+按当前 `lux.toml` 重新生成 `lux.lock`：
+
+```powershell
+luxc lock my_addon
+```
+
+这个命令不会查找新版本。Lux 的无 registry 模型中，版本选择来自 manifest 里的显式
+source ref；`lux.package.toml` 里的 package version 只用于检查选定依赖图的兼容性。
+
+## list
+
+打印 lockfile 里的包：
+
+```powershell
+luxc list my_addon
+```
+
+## doctor
+
+检查 package manager 状态：
+
+```powershell
+luxc doctor my_addon
+```
 
 ## compile
 
