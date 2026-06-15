@@ -23,9 +23,6 @@ my_addon/
     hud/
       cl_module.lux
       cl_paint.lux
-  packages/
-    my/gameplay/
-      src/module.lux
   generated/
     lua/...
 ```
@@ -43,7 +40,6 @@ bundle_id = "my_addon"
 source_root = "src"
 addon_root = "."
 generated_root = "generated"
-package_roots = "packages, vendor/lux-packages"
 source_comments = "readable"
 ```
 
@@ -52,8 +48,10 @@ source_comments = "readable"
 and registry names; set it when emitted paths must remain stable across
 machines.
 
-`package_roots` is optional. Project package roots are loaded in addition to
-compiler-shipped packages, and duplicate package ids are rejected.
+`package_roots` is optional and normally unnecessary for installed packages.
+`lux.lock` roots are loaded automatically after `luxc install`. Use
+`package_roots` for local vendoring or package development checkouts.
+Duplicate package ids are rejected.
 
 ## Module Discovery
 
@@ -180,17 +178,17 @@ Package roots let projects vendor or share Lux packages:
 
 ```toml
 [gmod]
-package_roots = "packages, vendor/lux-packages"
+package_roots = "vendor/project-packages"
 ```
 
 Example:
 
 ```text
-packages/
+vendor/project-packages/
   acme/ui/
-    lux.toml
     src/module.lux
 ```
 
-Package ids are resolved from their manifests. The same package id may not
-appear twice across compiler-shipped packages and project package roots.
+Package ids are resolved from `lux.package.toml` when a package set manifest is
+present, or from directory paths for convention-only roots. The same package id
+may not appear twice across locked packages and project package roots.

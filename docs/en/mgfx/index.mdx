@@ -58,9 +58,8 @@ for GLua-facing code, old panels, console demos, and gradual migration.
 `@lux/mgfx` is client-only. When a project imports it, `luxc gmod build`
 compiles the required module parts, keeps realm exports client-scoped, emits
 generated Lua, and generates the GMod loader. The package root comes from the
-project lockfile after installation; it is not bundled into the default Lux
-package submodule. Do not copy the old MGFX Lua autorun loader into a Lux
-project.
+project lockfile after installation; it is not bundled with `luxc`. Do not copy
+the old MGFX Lua autorun loader into a Lux project.
 
 MGFX is also a practical example of Lux package design: one package is split
 into submodules such as `frame`, `paint`, `style`, `text`, `widgets`,

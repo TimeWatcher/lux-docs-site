@@ -55,8 +55,8 @@ end
 
 `@lux/mgfx` 是 client-only package。项目导入它后，`luxc gmod build` 会编译实际依赖
 到的 module part、保持导出为客户端运行域、生成 Lua，并生成 GMod loader。Lux 项目
-安装后会从 `lux.lock` 读取对应 package root；它不再随默认 Lux package submodule
-捆绑。Lux 项目不应该再复制旧 MGFX Lua autorun loader。
+安装后会从 `lux.lock` 读取对应 package root；它不随 `luxc` 捆绑。Lux 项目不应该再
+复制旧 MGFX Lua autorun loader。
 
 MGFX 也是 Lux package 设计的实际例子：一个 package 拆成 `frame`、`paint`、`style`、
 `text`、`widgets`、`materials`、`shaderpack` 等子模块；module part 共享内部作用域，

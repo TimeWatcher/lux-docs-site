@@ -6,7 +6,7 @@ description: luxc commands for lexing, parsing, linting, formatting, compiling, 
 # CLI Reference
 
 The CLI reference assumes the prebuilt `luxc` is available on `PATH`. Download
-the release archive, keep `packages/` next to `luxc.exe`, and run commands as:
+the release archive and run commands as:
 
 ```powershell
 luxc <command>
@@ -19,7 +19,8 @@ If `luxc` is not on `PATH`, use the explicit executable path:
 ```
 
 Compiler contributors can run the same commands from source, but normal Lux
-projects should use the prebuilt `luxc`.
+projects should use the prebuilt `luxc`. Official packages such as `@lux/std`
+are installed per project with `luxc init --std` or `luxc install`.
 
 ## Command Overview
 
@@ -28,6 +29,10 @@ luxc lex <path>
 luxc parse <path>
 luxc lint <path>
 luxc format <path> [--check] [--write]
+luxc init [path] [--name <name>] [--std] [--template gmod-addon]
+luxc install <package-id> --from <github:owner/repo|url|path> [--tag <tag>|--branch <branch>|--commit <commit>]
+luxc list [project-root]
+luxc doctor [project-root]
 luxc compile <path> [--map <path>] [--source-comments none|readable|boundary|dense]
 luxc map-error <map.json> <generated-line>
 luxc gmod build <source-root> <addon-root> [--generated-root <path>] [--dry-run]

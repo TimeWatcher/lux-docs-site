@@ -16,7 +16,7 @@ The GMod backend performs these steps:
 ```text
 1. Read lux.toml.
 2. Discover modules under source_root.
-3. Discover Lux packages from package_roots and compiler-shipped packages.
+3. Discover Lux packages from `lux.lock` and configured `package_roots`.
 4. Infer part realms from cl_/sv_/sh_ prefixes and realm directories.
 5. Resolve imports, exports, macros, and host transforms.
 6. Check realm availability and unknown extern policy.

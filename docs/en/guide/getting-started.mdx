@@ -25,11 +25,7 @@ Extract it somewhere stable:
 tools/
   luxc/
     luxc.exe
-    packages/
 ```
-
-Keep the bundled `packages/` directory next to `luxc.exe`; it contains the
-standard Lux packages used by imports such as `@lux/std` and `@lux/gmod`.
 
 Run the compiler from that directory:
 
@@ -47,7 +43,7 @@ If you are developing the compiler itself, clone the main repository and build
 from source:
 
 ```powershell
-git clone --recurse-submodules https://github.com/TimeWatcher/lux.git
+git clone https://github.com/TimeWatcher/lux.git
 cd lux\compiler
 cargo test
 cargo build
@@ -161,6 +157,20 @@ The module has one public API, but each exported name is available only in the
 realm where it is valid.
 
 ## Create a GMod Project
+
+Create a project skeleton. Plain `init` is offline and writes no dependencies:
+
+```powershell
+luxc init my_addon
+```
+
+Add the official standard package set when your project imports packages such
+as `@lux/std` or `@lux/gmod`:
+
+```powershell
+luxc init my_addon --std
+luxc install @lux/gmod --from github:TimeWatcher/lux-std --project my_addon
+```
 
 Create `lux.toml` at the addon root:
 

@@ -17,8 +17,9 @@ luxc <command>
 .\tools\luxc\luxc.exe <command>
 ```
 
-解压后的 `packages/` 目录需要和 `luxc.exe` 保持同级。只有开发编译器源码时，才需要
-从源码仓库通过 Cargo 运行同一批命令；普通 Lux 项目应使用预构建 `luxc`。
+只有开发编译器源码时，才需要从源码仓库通过 Cargo 运行同一批命令；普通 Lux 项目应
+使用预构建 `luxc`。`@lux/std` 等官方 package 通过 `luxc init --std` 或 `luxc install`
+按项目安装。
 
 ## 命令总览
 
@@ -27,6 +28,10 @@ luxc lex <path>
 luxc parse <path>
 luxc lint <path>
 luxc format <path> [--check] [--write]
+luxc init [path] [--name <name>] [--std] [--template gmod-addon]
+luxc install <package-id> --from <github:owner/repo|url|path> [--tag <tag>|--branch <branch>|--commit <commit>]
+luxc list [project-root]
+luxc doctor [project-root]
 luxc compile <path> [--map <path>] [--source-comments [none|readable|boundary|dense]]
 luxc map-error <map.json> <generated-line>
 luxc gmod build <source-root> <addon-root> [--generated-root <path>] [--dry-run]

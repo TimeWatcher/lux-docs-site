@@ -100,7 +100,8 @@ import { arr } from "@lux/std"
 
 ```text
 "inventory" resolves from the current source root.
-"@lux/std" resolves from package roots or compiler-shipped packages.
+"@lux/std" resolves from the installed package roots recorded in `lux.lock`, or
+from explicit `package_roots` used for local development.
 ```
 
 </LuxLuaPair>

@@ -1,6 +1,6 @@
 ---
 title: Packages
-description: Lux 自带 package 的 runtime、compile-time 和 host 约定。
+description: Lux package set 的 runtime、compile-time 和 host 约定。
 ---
 
 # Packages
@@ -26,7 +26,7 @@ host/         host transform Lux，由 luxc 离线执行
 transform，但还不是具体 UI 后端。`@lux/macros` 暴露 compile-time macro。runtime
 package code 不会被写死在 Rust codegen 里。
 
-## Built-in packages
+## 官方 `lux-std` packages
 
 - `@lux/std`
 - `@lux/gmod`
@@ -37,8 +37,15 @@ package code 不会被写死在 Rust codegen 里。
 - `@lux/compile/macro`
 - `@lux/compile/host`
 
-项目 package root 通过 `lux.toml` 的 `package_roots` 添加。内置 package
-先加载，重复 package id 会报错。
+官方 package set 按项目安装：
+
+```powershell
+luxc init my_addon --std
+luxc install @lux/gmod --from github:TimeWatcher/lux-std --project my_addon
+```
+
+`lux.lock` 里的 package root 会自动加载。`lux.toml` 的 `package_roots` 主要用于本地
+vendoring 或开发中的 package checkout。重复 package id 会报错。
 
 外部 package set，包括 MGFX，通过 `luxc install` 按项目安装。package set 可以来自
 GitHub archive、zip URL 或本地路径；多层依赖由 package set 的 source hint 自动解析，

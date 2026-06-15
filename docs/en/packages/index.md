@@ -1,6 +1,6 @@
 ---
 title: Packages
-description: Runtime, compile-time, and host package conventions shipped with Lux.
+description: Runtime, compile-time, and host package conventions for Lux package sets.
 ---
 
 # Packages
@@ -27,7 +27,7 @@ A package can combine phases. `@lux/ui` currently acts as a syntax-facing layer
 with host transforms. `@lux/macros` exposes compile-time macros. Runtime
 package code is not embedded in Rust codegen.
 
-## Built-in packages
+## Official `lux-std` packages
 
 - `@lux/std`
 - `@lux/gmod`
@@ -38,8 +38,16 @@ package code is not embedded in Rust codegen.
 - `@lux/compile/macro`
 - `@lux/compile/host`
 
-Project package roots are added through `package_roots` in `lux.toml`. Built-in
-packages load first, and duplicate package ids are rejected.
+Install the official package set per project:
+
+```powershell
+luxc init my_addon --std
+luxc install @lux/gmod --from github:TimeWatcher/lux-std --project my_addon
+```
+
+Locked package roots are loaded automatically from `lux.lock`.
+`package_roots` in `lux.toml` is for local vendoring or package development
+checkouts. Duplicate package ids are rejected.
 
 External package sets, including MGFX, are installed per project with `luxc
 install`. A package set can be fetched from GitHub archives, zip URLs, or local

@@ -26,11 +26,7 @@ GLua 文件，因此不需要游戏内解析器。
 tools/
   luxc/
     luxc.exe
-    packages/
 ```
-
-`packages/` 必须和 `luxc.exe` 同级，里面包含 `@lux/std`、`@lux/gmod`、`@lux/ui`
-等内置包。MGFX 等可选生态包通过 `luxc install` 按项目安装。
 
 确认编译器可运行：
 
@@ -44,7 +40,7 @@ tools/
 如果你要开发编译器源码，再使用：
 
 ```powershell
-git clone --recurse-submodules https://github.com/TimeWatcher/lux.git
+git clone https://github.com/TimeWatcher/lux.git
 cd lux\compiler
 cargo test
 cargo build
@@ -167,6 +163,19 @@ end
 注意：导入只用于引用其他模块。模块内部的 part 共享同一个模块作用域。
 
 ## 创建 GMod 项目
+
+创建项目骨架。普通 `init` 离线执行，不写入依赖：
+
+```powershell
+luxc init my_addon
+```
+
+当项目需要导入 `@lux/std`、`@lux/gmod` 等官方 package 时，再显式安装标准 package set：
+
+```powershell
+luxc init my_addon --std
+luxc install @lux/gmod --from github:TimeWatcher/lux-std --project my_addon
+```
 
 最小项目只需要一个 `lux.toml` 和 `src` 目录：
 
