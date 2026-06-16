@@ -43,12 +43,14 @@ my_addon/
 当前 `lux.toml` 支持这些字段：
 
 ```toml
-[gmod]
-source_root = "src"
-addon_root = "."
-generated_root = "generated"
 package_id = "my_addon"
 bundle_id = "my_addon"
+
+[target.gmod]
+source_root = "src"
+out = "generated/lua"
+runtime_base = "lux/my-addon"
+autorun = true
 source_comments = "boundary"
 
 [target.gmod.realm]
@@ -60,15 +62,9 @@ FancyHud.Open = "client"
 SharedLibrary = "shared"
 ```
 
-也可以使用顶层字段：
-
-```toml
-source_root = "src"
-addon_root = "generated"
-```
-
-路径相对于 `lux.toml` 所在目录解析。`generated_root` 省略时默认等于 `addon_root`。
-开发阶段建议把生成目录放到独立位置，避免覆盖手写文件。
+路径相对于 `lux.toml` 所在目录解析。`out` 是物理输出根；`runtime_base` 是生成
+`include` / `AddCSLuaFile` 使用的 GMod 相对路径；`autorun` 控制是否额外生成 addon
+风格入口。开发阶段建议把 `out` 放到独立位置，避免覆盖手写文件。
 
 ## 模块发现
 
@@ -176,24 +172,27 @@ src/client/sv_store.lux
 
 这里最近的目录表示 `client`，文件前缀表示 `server`，编译器会拒绝它。
 
-## 生成目录
+## 输出目录
 
-GMod 后端生成的是普通 Lua 插件结构：
+GMod 后端把所有产物写到 `out` 下面：
 
 ```text
 generated/
   lua/
     autorun/
-      lux_my_addon_init.lua
-      client/lux_my_addon_cl_init.lua
-      server/lux_my_addon_sv_init.lua
+      my_addon.lua
     lux/
-      client/
-      server/
+      my-addon/
+        loader_shared.lua
+        loader_client.lua
+        loader_server.lua
+        client/
+        server/
 ```
 
-loader 文件名带 `bundle_id`，避免不同插件都生成 `lux_init.lua` 而互相覆盖。客户端
-文件的 `AddCSLuaFile` 会按块批量生成，不再要求开发者手写冗长 loader。
+`autorun/my_addon.lua` 只是可选 forwarder。真正的模块注册、运行域分发和
+`AddCSLuaFile` 在 `runtime_base` 下的 Lux loader tree 内完成。设置 `autorun = false`
+时仍然生成 loader tree，只是不生成 `autorun` 入口。
 
 ## Package 根目录
 
@@ -201,7 +200,7 @@ loader 文件名带 `bundle_id`，避免不同插件都生成 `lux_init.lua` 而
 主要用于本地 package 开发 checkout：
 
 ```toml
-[gmod]
+[target.gmod]
 package_roots = "local-packages"
 ```
 

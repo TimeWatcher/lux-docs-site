@@ -7,7 +7,7 @@ description: GMod loader 文件、AddCSLuaFile 批处理、私有注册表和模
 
 传统 GLua 插件经常需要手写 `include`、`AddCSLuaFile` 和客户端/服务端分支。Lux 不要求
 开发者维护这种加载顺序。编译器已经知道模块图、运行域和生成路径，因此可以生成确定
-性的 GMod loader。
+性的 Lux loader tree。`autorun` 只是可选的薄入口。
 
 <LuxLuaPair title="手写 loader 被生成 loader 替代" luxLabel="旧 GLua" luaLabel="Lux 生成 Lua">
 
@@ -20,29 +20,35 @@ if CLIENT then include("cl_panel.lua") end
 
 ```lua
 if SERVER then
-  AddCSLuaFile("autorun/lux_my_addon_init.lua")
-  AddCSLuaFile("autorun/client/lux_my_addon_cl_init.lua")
-  AddCSLuaFile("lux/my_addon/client/my_addon/cl_panel.lua")
+  AddCSLuaFile("lux/my-addon/loader_shared.lua")
+  AddCSLuaFile("lux/my-addon/loader_client.lua")
+  AddCSLuaFile("lux/my-addon/client/my_addon/cl_panel.lua")
 end
 
-include("lux/my_addon/server/my_addon/sv_store.lua")
-include("lux/my_addon/shared/my_addon/shared.lua")
+include("lux/my-addon/server/my_addon/sv_store.lua")
+include("lux/my-addon/shared/my_addon/shared.lua")
 ```
 
 </LuxLuaPair>
 
 ## Loader 文件
 
-当前 GMod 后端生成三个入口：
+当前 GMod 后端在 `runtime_base` 下生成三个 loader：
 
 ```text
-lua/autorun/lux_<namespace>_init.lua
-lua/autorun/client/lux_<namespace>_cl_init.lua
-lua/autorun/server/lux_<namespace>_sv_init.lua
+lux/my-addon/loader_shared.lua
+lux/my-addon/loader_client.lua
+lux/my-addon/loader_server.lua
 ```
 
-`<namespace>` 来自 `package_id`，会被转换成 GMod 文件名安全的形式。这样多个 Lux 插件
-不会都生成 `lux_init.lua`。
+当 `autorun = true` 时，Lux 额外生成一个 addon 风格的 forwarder：
+
+```text
+autorun/my_addon.lua
+```
+
+设置 `autorun = false` 不会关闭 Lux loader，只是不生成 `autorun` 入口。已有
+gamemode、框架或手写入口可以自己 include 这些 loader。
 
 `bundle_id` 用于生成 Lua 模块根目录和私有注册表名。通常让 `package_id` 和
 `bundle_id` 相同即可；需要在同一插件里打多个 bundle 时再区分它们。
@@ -54,18 +60,18 @@ lua/autorun/server/lux_<namespace>_sv_init.lua
 <LuxLuaPair title="AddCSLuaFile 批处理" luxLabel="旧生成形态" luaLabel="当前生成形态">
 
 ```lua
-if SERVER then AddCSLuaFile("autorun/lux_my_addon_init.lua") end
-if SERVER then AddCSLuaFile("autorun/client/lux_my_addon_cl_init.lua") end
-if SERVER then AddCSLuaFile("lux/my_addon/client/runtime/lux/std.lua") end
-if SERVER then AddCSLuaFile("lux/my_addon/client/my_addon/hud.lua") end
+if SERVER then AddCSLuaFile("lux/my-addon/loader_shared.lua") end
+if SERVER then AddCSLuaFile("lux/my-addon/loader_client.lua") end
+if SERVER then AddCSLuaFile("lux/my-addon/client/runtime/lux/std.lua") end
+if SERVER then AddCSLuaFile("lux/my-addon/client/my_addon/hud.lua") end
 ```
 
 ```lua
 if SERVER then
-  AddCSLuaFile("autorun/lux_my_addon_init.lua")
-  AddCSLuaFile("autorun/client/lux_my_addon_cl_init.lua")
-  AddCSLuaFile("lux/my_addon/client/runtime/lux/std.lua")
-  AddCSLuaFile("lux/my_addon/client/my_addon/hud.lua")
+  AddCSLuaFile("lux/my-addon/loader_shared.lua")
+  AddCSLuaFile("lux/my-addon/loader_client.lua")
+  AddCSLuaFile("lux/my-addon/client/runtime/lux/std.lua")
+  AddCSLuaFile("lux/my-addon/client/my_addon/hud.lua")
 end
 ```
 
@@ -144,7 +150,7 @@ loader 注册模块的形状如下。真实模块 ID 由编译器生成，可能
 ```lua
 do
   if __lux_registry["my_addon/hud#client"] == nil then
-    local __lux_factory = include("lux/my_addon/client/my_addon/hud.lua")
+    local __lux_factory = include("lux/my-addon/client/my_addon/hud.lua")
     __lux_registry["my_addon/hud#client"] = __lux_factory(__lux_import) or {}
   end
 end

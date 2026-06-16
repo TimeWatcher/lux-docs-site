@@ -28,7 +28,7 @@ luxc lex <path>
 luxc parse <path>
 luxc lint <path>
 luxc format <path> [--check] [--write]
-luxc init [path] [--name <name>] [--std] [--template gmod-addon]
+luxc init [path] [--name <name>] [--std] [--out <path>] [--runtime-base <path>] [--no-autorun]
 luxc install <package-id> --from <github:owner/repo|url|path> [--tag <tag>|--branch <branch>|--commit <commit>]
 luxc remove <package-id> [--project <project-root>]
 luxc lock [project-root]
@@ -36,9 +36,9 @@ luxc list [project-root]
 luxc doctor [project-root]
 luxc compile <path> [--map <path>] [--source-comments [none|readable|boundary|dense]]
 luxc map-error <map.json> <generated-line>
-luxc gmod build <source-root> <addon-root> [--generated-root <path>] [--dry-run]
-luxc gmod build --manifest <lux.toml> [--generated-root <path>] [--dry-run]
-luxc gmod package --manifest <lux.toml> --gmad <path> --out <path> [--run] [--generated-root <path>]
+luxc gmod build <source-root> --out <path> [--runtime-base <path>] [--no-autorun] [--dry-run]
+luxc gmod build --manifest <lux.toml> [--out <path>] [--runtime-base <path>] [--no-autorun] [--dry-run]
+luxc gmod package --manifest <lux.toml> --root <path> --gmad <path> --out <path> [--run] [--build-out <path>] [--runtime-base <path>] [--no-autorun]
 ```
 
 ## lex
@@ -121,6 +121,22 @@ luxc init my_addon
 
 ```powershell
 luxc init my_addon --std
+```
+
+默认 `init` 生成 addon-friendly 的 GMod 配置：
+
+```toml
+[target.gmod]
+source_root = "src"
+out = "generated/lua"
+runtime_base = "lux/my_addon"
+autorun = true
+```
+
+如果入口由已有 gamemode、框架或手写 loader 接管，可以关闭 `autorun`：
+
+```powershell
+luxc init my_addon --no-autorun --out generated
 ```
 
 ## install
@@ -240,10 +256,11 @@ luxc gmod build --manifest examples\gmod_project\lux.toml --dry-run
 直接指定路径：
 
 ```powershell
-luxc gmod build src addon --generated-root generated
+luxc gmod build src --out generated/lua
 ```
 
-`--generated-root` 会覆盖配置里的 `generated_root`，适合临时输出到测试目录。
+`--out` 会覆盖配置里的输出根，适合临时输出到测试目录。`--no-autorun` 只关闭
+`out/autorun` 下的 addon forwarder，不会关闭 Lux loader tree。
 
 ## gmod package
 
@@ -252,6 +269,7 @@ luxc gmod build src addon --generated-root generated
 ```powershell
 luxc gmod package `
   --manifest path\to\lux.toml `
+  --root generated `
   --gmad path\to\gmad.exe `
   --out dist\addon.gma
 ```
@@ -259,7 +277,9 @@ luxc gmod package `
 真正执行：
 
 ```powershell
-luxc gmod package --manifest path\to\lux.toml --gmad path\to\gmad.exe --out dist\addon.gma --run
+luxc gmod package --manifest path\to\lux.toml --root generated --gmad path\to\gmad.exe --out dist\addon.gma --run
 ```
 
-没有 `--run` 时不会调用 `gmad`。这是为了避免构建命令意外生成或覆盖发布包。
+没有 `--run` 时不会调用 `gmad`。这是为了避免构建命令意外生成或覆盖发布包。`--root`
+是传给 `gmad` 的打包根，和构建输出 `out` 是两个概念。只有需要临时覆盖 manifest
+构建输出时才使用 `--build-out`。

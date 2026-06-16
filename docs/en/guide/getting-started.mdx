@@ -172,15 +172,17 @@ luxc init my_addon --std
 luxc install @lux/gmod --from github:TimeWatcher/lux-std --project my_addon
 ```
 
-Create `lux.toml` at the addon root:
+Create `lux.toml` at the project root:
 
 ```toml
-[gmod]
 package_id = "my_addon"
 bundle_id = "my_addon"
+
+[target.gmod]
 source_root = "src"
-addon_root = "."
-generated_root = "generated"
+out = "generated/lua"
+runtime_base = "lux/my-addon"
+autorun = true
 source_comments = "readable"
 ```
 
@@ -208,19 +210,20 @@ luxc gmod build --manifest lux.toml
 
 The build step discovers modules under `source_root`, infers realms from file
 prefixes and folders, resolves package imports, emits Lua artifacts under
-`generated_root`, and writes generated loader files.
+`out`, writes the Lux loader tree under `runtime_base`, and writes an optional
+addon `autorun` forwarder.
 
 ## Build from Explicit Paths
 
-For experiments and CI slices, you can build from explicit source and addon
-paths:
+For experiments and CI slices, you can build from an explicit source root and
+output root:
 
 ```powershell
-luxc gmod build src . --generated-root generated
+luxc gmod build src --out generated/lua
 ```
 
 Use a manifest for real projects. It keeps package ids, output roots, source map
-settings, and extern policy in one stable place.
+settings, autorun policy, and extern policy in one stable place.
 
 ## Check and Format
 

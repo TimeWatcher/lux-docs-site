@@ -6,8 +6,9 @@ description: GMod project builds, generated layout, realm artifacts, loaders, GM
 # GMod Backend
 
 `luxc gmod build` turns Lux source modules into Garry's Mod Lua artifacts. The
-backend is responsible for discovery, realm splitting, loader generation,
-`AddCSLuaFile` routing, source maps, and package integration.
+backend is responsible for discovery, realm splitting, the Lux loader tree,
+optional `autorun` forwarding, `AddCSLuaFile` routing, source maps, and package
+integration.
 
 ## What the Backend Does
 
@@ -21,26 +22,32 @@ The GMod backend performs these steps:
 5. Resolve imports, exports, macros, and host transforms.
 6. Check realm availability and unknown extern policy.
 7. Emit server, client, and shared Lua artifacts.
-8. Emit generated loaders and source maps.
+8. Emit module artifacts, source maps, Lux loaders, and optional autorun forwarder.
 ```
 
-The result is a normal addon-shaped Lua tree that GMod can mount.
+The result is a relative-path-safe Lua output tree. Addon projects normally put
+that tree under `generated/lua`; gamemodes or framework integrations can point
+`out` somewhere else and include the loaders manually.
 
 ## Minimal Configuration
 
 ```toml
-[gmod]
 package_id = "my_addon"
 bundle_id = "my_addon"
+
+[target.gmod]
 source_root = "src"
-addon_root = "."
-generated_root = "generated"
+out = "generated/lua"
+runtime_base = "lux/my-addon"
+autorun = true
 source_comments = "readable"
 ```
 
 `package_id` identifies the current project package. `bundle_id` is used in
-generated loader and registry names. Use a stable, addon-specific value to avoid
-collisions with other addons mounted in the same GMod `lua/` namespace.
+generated registry names and default paths. `out` is the physical output root.
+`runtime_base` is the GMod-relative path used by generated `include` and
+`AddCSLuaFile` calls. `autorun = true` writes an addon-style forwarder under
+`out/autorun`; set it to `false` when another entry point owns startup.
 
 ## Generated Layout
 
@@ -50,17 +57,21 @@ Typical output:
 generated/
   lua/
     autorun/
-      lux_my_addon_init.lua
+      my_addon.lua
     lux/
-      client/
-        my_addon/
-          hud.lua
-      server/
-        my_addon/
-          inventory.lua
-      shared/
-        my_addon/
-          items.lua
+      my-addon/
+        loader_shared.lua
+        loader_client.lua
+        loader_server.lua
+        client/
+          my_addon/
+            hud.lua
+        server/
+          my_addon/
+            inventory.lua
+        shared/
+          my_addon/
+            items.lua
 ```
 
 The exact file density may change as module merging improves, but the generated
@@ -77,20 +88,20 @@ luxc gmod build --manifest lux.toml
 Build with explicit paths:
 
 ```powershell
-luxc gmod build src . --generated-root generated
+luxc gmod build src --out generated/lua
 ```
 
 For production-sized source comments, set this in `lux.toml`:
 
 ```toml
-[gmod]
+[target.gmod]
 source_comments = "none"
 ```
 
 Use source maps to map runtime Lua stack traces back to Lux source:
 
 ```text
-generated/lua/lux/client/my_addon/hud.lua:42:9 -> src/hud/cl_paint.lux:18:3
+generated/lua/lux/my-addon/client/my_addon/hud.lua:42:9 -> src/hud/cl_paint.lux:18:3
 ```
 
 ## Realm Artifacts
@@ -126,15 +137,15 @@ uses inside the block are accepted even when the surrounding function is shared.
 
 ## Package as GMA
 
-After building, package the addon with GMod tools from the addon root:
+After building, package the addon with GMod tools from the addon root. If
+`out = "generated/lua"`, the package root is usually `generated`:
 
 ```powershell
-gmad.exe create -folder . -out my_addon.gma
+gmad.exe create -folder generated -out my_addon.gma
 ```
 
-Keep generated output inside the addon folder if it should be packaged. Keep
-large temporary build folders outside the addon root or exclude them from your
-packaging process.
+Keep generated output under the package root if it should be included in the
+GMA. `out` itself is not necessarily the package root.
 
 ## Development Recommendations
 
@@ -146,5 +157,6 @@ packaging process.
 - Use realm blocks for fine-grained server/client code inside shared hooks.
 - Treat unknown external warnings as work items; add `extern` declarations for
   third-party APIs you rely on.
-- Do not hand-write `AddCSLuaFile` for Lux modules. The generated loader owns
-  client file routing.
+- Do not hand-write `AddCSLuaFile` for Lux modules. The generated Lux loader
+  owns client file routing. If `autorun = false`, include the generated loaders
+  from your own entry point.

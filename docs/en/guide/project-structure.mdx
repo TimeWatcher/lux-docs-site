@@ -1,6 +1,6 @@
 ---
 title: Project Structure
-description: Source roots, packages, module entries, part ordering, realm inference, generated roots, and manifests.
+description: Source roots, packages, module entries, part ordering, realm inference, output roots, and manifests.
 ---
 
 # Project Structure
@@ -27,26 +27,29 @@ my_addon/
     lua/...
 ```
 
-`source_root` points at `src`. `generated_root` is where Lux writes GLua
-artifacts. Keeping generated output separate from source makes it safe to clean
-and review.
+`source_root` points at `src`. `out` is where Lux writes GLua artifacts.
+Keeping generated output separate from source makes it safe to clean and review.
 
 ## Manifest
 
 ```toml
-[gmod]
 package_id = "my_addon"
 bundle_id = "my_addon"
+
+[target.gmod]
 source_root = "src"
-addon_root = "."
-generated_root = "generated"
+out = "generated/lua"
+runtime_base = "lux/my-addon"
+autorun = true
 source_comments = "readable"
 ```
 
-`source_root` and `addon_root` are required for manifest builds.
-`generated_root` defaults to `addon_root`. `bundle_id` controls generated loader
-and registry names; set it when emitted paths must remain stable across
-machines.
+`source_root` and `out` are required for manifest builds. `out` is the physical
+output root. `runtime_base` is the GMod relative path used by generated
+`include` and `AddCSLuaFile` calls. `autorun = true` writes an addon-style
+forwarder under `out/autorun`; `autorun = false` leaves startup to your own
+entry point. `bundle_id` controls generated registry names; set it when emitted
+names must remain stable across machines.
 
 `package_roots` is optional and normally unnecessary for installed packages.
 `lux.lock` roots are loaded automatically after `luxc install`. Use
@@ -150,26 +153,30 @@ shared/**/*.lux shared
 If a prefix conflicts with the nearest realm directory, compilation fails.
 Unmarked files default to shared.
 
-## Generated Root
+## Output Tree
 
-Generated files live under `generated_root`:
+Generated files live under `out`:
 
 ```text
 generated/
   lua/
     autorun/
-      lux_my_addon_init.lua
+      my_addon.lua
     lux/
-      client/
-      server/
-      shared/
+      my-addon/
+        loader_shared.lua
+        loader_client.lua
+        loader_server.lua
+        client/
+        server/
+        shared/
 ```
 
-Generated loader names include the bundle id. Do not use generic names such as
-`lux_init.lua`; GMod mounts every addon under one `lua/` namespace, so generic
-loader names can collide across addons.
+The loader tree starts at `runtime_base`. The `autorun` file is only a forwarder
+that includes the generated loaders. With `autorun = false`, Lux still emits the
+same loader tree and module files, but no `out/autorun` entry.
 
-Generated roots should be treated as build output. Do not edit generated files
+Generated output should be treated as build output. Do not edit generated files
 by hand.
 
 ## Package Roots
@@ -177,7 +184,7 @@ by hand.
 Package roots let projects point at local package development checkouts:
 
 ```toml
-[gmod]
+[target.gmod]
 package_roots = "local-packages"
 ```
 

@@ -195,12 +195,15 @@ my_addon/
 推荐的 `lux.toml`：
 
 ```toml
-[gmod]
-source_root = "src"
-addon_root = "."
-generated_root = "generated"
-source_comments = "boundary"
+package_id = "my_addon"
 bundle_id = "my_addon"
+
+[target.gmod]
+source_root = "src"
+out = "generated/lua"
+runtime_base = "lux/my-addon"
+autorun = true
+source_comments = "boundary"
 
 [target.gmod.realm]
 unknown_external = "warn"
@@ -209,10 +212,11 @@ unknown_external = "warn"
 字段含义：
 
 - `source_root`：Lux 源码根目录。
-- `addon_root`：GMod 插件根目录，也就是包含 `addon.json` 的目录。
-- `generated_root`：生成文件写入位置。开发时建议先写到独立目录。
+- `out`：物理输出根。开发时建议先写到独立目录。
+- `runtime_base`：生成 `include` / `AddCSLuaFile` 使用的 GMod 相对路径。
+- `autorun`：是否额外生成 addon 风格 `autorun` forwarder。
 - `source_comments`：生成 Lua 的源码注释密度。
-- `bundle_id`：生成 loader 文件名和私有注册表命名用的稳定标识。
+- `bundle_id`：生成私有注册表命名用的稳定标识。
 - `unknown_external`：未知外部符号策略，见 GMod 外部 API 文档。
 
 构建：
@@ -227,12 +231,14 @@ luxc gmod build --manifest examples\gmod_project\lux.toml
 generated/
   lua/
     autorun/
-      lux_<bundle>_init.lua
-      client/lux_<bundle>_cl_init.lua
-      server/lux_<bundle>_sv_init.lua
+      my_addon.lua
     lux/
-      client/...
-      server/...
+      my-addon/
+        loader_shared.lua
+        loader_client.lua
+        loader_server.lua
+        client/...
+        server/...
 ```
 
 开发时可以先用 `--dry-run` 查看构建计划，不写任何文件：
@@ -241,15 +247,15 @@ generated/
 luxc gmod build --manifest path\to\lux.toml --dry-run
 ```
 
-确认生成内容后，再把 `generated` 目录里的 `lua` 合并到你的 GMod 插件目录，或把
-`generated_root` 直接指向开发用插件目录。不要把输出指向正在维护的原始源码目录。
+确认生成内容后，再把 `generated` 目录里的 `lua` 合并到你的 GMod 插件目录，或让
+`out` 直接指向开发用入口目录下的 Lua 根。不要把输出指向正在维护的原始源码目录。
 
 ## 直接指定路径构建
 
-没有 `lux.toml` 时也可以显式给出源码目录和插件目录：
+没有 `lux.toml` 时也可以显式给出源码目录和输出目录：
 
 ```powershell
-luxc gmod build path\to\src path\to\addon --generated-root path\to\generated
+luxc gmod build path\to\src --out path\to\generated\lua
 ```
 
 这种形式适合临时测试；团队项目推荐使用 `lux.toml`，因为外部符号声明、源码注释

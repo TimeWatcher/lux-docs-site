@@ -5,9 +5,10 @@ description: Generated GMod loaders, bundle-specific names, AddCSLuaFile batchin
 
 # Generated Loader
 
-Lux replaces hand-written GMod loader code with generated loader artifacts. The
+Lux replaces hand-written GMod loader code with a generated loader tree. The
 goal is to remove repeated `if SERVER then AddCSLuaFile(...) end` boilerplate
-and make load order a compiler-owned property.
+and make load order a compiler-owned property. `autorun` is only an optional
+thin forwarder into that loader tree.
 
 <LuxLuaPair title="Hand-written loader is replaced by generated loader" luxLabel="Old GLua" luaLabel="Lux generated Lua">
 
@@ -20,21 +21,20 @@ if CLIENT then include("cl_hud.lua") end
 ```
 
 ```lua
--- lua/autorun/lux_my_addon_init.lua
-local __lux_files_client = {
-  "lua/lux/client/my_addon/hud.lua",
-  "lua/lux/client/my_addon/menu.lua",
-}
-
+-- lux/my-addon/loader_shared.lua
 if SERVER then
-  for i = 1, #__lux_files_client do
-    AddCSLuaFile(__lux_files_client[i])
-  end
+  AddCSLuaFile("lux/my-addon/loader_shared.lua")
+  AddCSLuaFile("lux/my-addon/loader_client.lua")
+  AddCSLuaFile("lux/my-addon/client/my_addon/hud.lua")
+  AddCSLuaFile("lux/my-addon/client/my_addon/menu.lua")
 end
 
-include("lua/lux/shared/my_addon/items.lua")
-if SERVER then include("lua/lux/server/my_addon/store.lua") end
-if CLIENT then include("lua/lux/client/my_addon/hud.lua") end
+-- lux/my-addon/loader_server.lua
+include("lux/my-addon/server/my_addon/store.lua")
+
+-- lux/my-addon/loader_client.lua
+include("lux/my-addon/shared/my_addon/items.lua")
+include("lux/my-addon/client/my_addon/hud.lua")
 ```
 
 </LuxLuaPair>
@@ -44,16 +44,23 @@ build output.
 
 ## Loader Files
 
-Loader filenames include the project bundle id:
+Loader files live under `runtime_base`:
 
 ```text
-lua/autorun/lux_my_addon_init.lua
-lua/autorun/client/lux_my_addon_client_init.lua
+lux/my-addon/loader_shared.lua
+lux/my-addon/loader_client.lua
+lux/my-addon/loader_server.lua
 ```
 
-The bundle id matters because GMod mounts all addons under one `lua/` namespace.
-Generic names such as `lux_init.lua` can collide and overwrite each other across
-addons.
+When `autorun = true`, Lux also writes a small addon-style forwarder:
+
+```text
+autorun/my_addon.lua
+```
+
+Set `autorun = false` when an existing gamemode, framework, or hand-written
+entry point should include the generated loaders itself. This does not disable
+the Lux loader.
 
 ## `AddCSLuaFile` Batching
 
@@ -63,22 +70,16 @@ SERVER` guard on every line.
 <LuxLuaPair title="AddCSLuaFile batching" luxLabel="Old generated shape" luaLabel="Current generated shape">
 
 ```lua
-if SERVER then AddCSLuaFile("lua/lux/client/runtime/lux/std.lua") end
-if SERVER then AddCSLuaFile("lua/lux/client/my_addon/hud.lua") end
-if SERVER then AddCSLuaFile("lua/lux/client/my_addon/ui.lua") end
+if SERVER then AddCSLuaFile("lux/my-addon/client/runtime/lux/std.lua") end
+if SERVER then AddCSLuaFile("lux/my-addon/client/my_addon/hud.lua") end
+if SERVER then AddCSLuaFile("lux/my-addon/client/my_addon/ui.lua") end
 ```
 
 ```lua
-local __lux_client_files = {
-  "lua/lux/client/runtime/lux/std.lua",
-  "lua/lux/client/my_addon/hud.lua",
-  "lua/lux/client/my_addon/ui.lua",
-}
-
 if SERVER then
-  for i = 1, #__lux_client_files do
-    AddCSLuaFile(__lux_client_files[i])
-  end
+  AddCSLuaFile("lux/my-addon/client/runtime/lux/std.lua")
+  AddCSLuaFile("lux/my-addon/client/my_addon/hud.lua")
+  AddCSLuaFile("lux/my-addon/client/my_addon/ui.lua")
 end
 ```
 
@@ -158,7 +159,7 @@ the exports.
 ```
 
 ```lua
-local __lux_factory = include("lua/lux/shared/my_addon/items.lua")
+local __lux_factory = include("lux/my-addon/shared/my_addon/items.lua")
 __lux_modules["my_addon/items"] = __lux_factory(__lux_import)
 ```
 

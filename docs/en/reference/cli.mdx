@@ -29,7 +29,7 @@ luxc lex <path>
 luxc parse <path>
 luxc lint <path>
 luxc format <path> [--check] [--write]
-luxc init [path] [--name <name>] [--std] [--template gmod-addon]
+luxc init [path] [--name <name>] [--std] [--out <path>] [--runtime-base <path>] [--no-autorun]
 luxc install <package-id> --from <github:owner/repo|url|path> [--tag <tag>|--branch <branch>|--commit <commit>]
 luxc remove <package-id> [--project <project-root>]
 luxc lock [project-root]
@@ -37,9 +37,9 @@ luxc list [project-root]
 luxc doctor [project-root]
 luxc compile <path> [--map <path>] [--source-comments none|readable|boundary|dense]
 luxc map-error <map.json> <generated-line>
-luxc gmod build <source-root> <addon-root> [--generated-root <path>] [--dry-run]
-luxc gmod build --manifest <lux.toml> [--generated-root <path>] [--dry-run]
-luxc gmod package --manifest <lux.toml> --gmad <path> --out <path> [--run]
+luxc gmod build <source-root> --out <path> [--runtime-base <path>] [--no-autorun] [--dry-run]
+luxc gmod build --manifest <lux.toml> [--out <path>] [--runtime-base <path>] [--no-autorun] [--dry-run]
+luxc gmod package --manifest <lux.toml> --root <path> --gmad <path> --out <path> [--run] [--build-out <path>] [--runtime-base <path>] [--no-autorun]
 ```
 
 All paths are read and written as UTF-8 text.
@@ -125,6 +125,23 @@ Plain `init` is offline and writes an empty `[dependencies]` table. Add
 
 ```powershell
 luxc init my_addon --std
+```
+
+By default, `init` creates an addon-friendly GMod configuration:
+
+```toml
+[target.gmod]
+source_root = "src"
+out = "generated/lua"
+runtime_base = "lux/my_addon"
+autorun = true
+```
+
+Use `--no-autorun` when an existing entry point should include the generated
+Lux loaders:
+
+```powershell
+luxc init my_addon --no-autorun --out generated
 ```
 
 ## `install`
@@ -225,7 +242,7 @@ luxc gmod build --manifest lux.toml
 Build with explicit paths:
 
 ```powershell
-luxc gmod build src . --generated-root generated
+luxc gmod build src --out generated/lua
 ```
 
 Preview the output plan without writing files:
@@ -236,21 +253,25 @@ luxc gmod build --manifest lux.toml --dry-run
 
 `gmod build` performs module discovery, package resolution, realm splitting,
 loader generation, source map generation, and diagnostics for the whole project.
+`--no-autorun` disables only the addon-style forwarder under `out/autorun`; the
+Lux loader tree and module registry are still emitted.
 
 ## `gmod package`
 
 Package a built addon with `gmad.exe`:
 
 ```powershell
-luxc gmod package --manifest lux.toml --gmad C:\path\to\gmad.exe --out dist\my_addon.gma
+luxc gmod package --manifest lux.toml --root generated --gmad C:\path\to\gmad.exe --out dist\my_addon.gma
 ```
 
 Add `--run` to actually invoke `gmad`. Without `--run`, Lux prints the package
 plan so CI and release scripts can inspect it.
 
 ```powershell
-luxc gmod package --manifest lux.toml --gmad C:\path\to\gmad.exe --out dist\my_addon.gma --run
+luxc gmod package --manifest lux.toml --root generated --gmad C:\path\to\gmad.exe --out dist\my_addon.gma --run
 ```
 
 Packaging does not replace `gmod build`; it packages the addon layout produced
-by the build step.
+by the build step. `--root` is the package root passed to `gmad`; it is separate
+from the build `out` path. Use `--build-out` only when the package command
+should temporarily override the manifest build output.
