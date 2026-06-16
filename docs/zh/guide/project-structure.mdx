@@ -66,6 +66,10 @@ SharedLibrary = "shared"
 `include` / `AddCSLuaFile` 使用的 GMod 相对路径；`autorun` 控制是否额外生成 addon
 风格入口。开发阶段建议把 `out` 放到独立位置，避免覆盖手写文件。
 
+这两个路径刻意分离：`out` 可以指向生成目录、live addon 的 Lua 根，或 gamemode /
+框架集成路径；生成 Lua 内部仍然只写 GMod 运行时能解析的相对路径。不要把
+`runtime_base` 当成操作系统目录或 addon 根目录。
+
 ## 模块发现
 
 Lux 项目构建会递归扫描 `source_root` 下的所有 `.lux` 文件。模块路径由文件相对路径
@@ -192,7 +196,8 @@ generated/
 
 `autorun/my_addon.lua` 只是可选 forwarder。真正的模块注册、运行域分发和
 `AddCSLuaFile` 在 `runtime_base` 下的 Lux loader tree 内完成。设置 `autorun = false`
-时仍然生成 loader tree，只是不生成 `autorun` 入口。
+时仍然生成 loader tree，只是不生成 `autorun` 入口；已有 gamemode、框架或手写 Lua
+可以自己 include 生成的 loader。
 
 ## Package 根目录
 

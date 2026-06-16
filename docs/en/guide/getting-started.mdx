@@ -5,49 +5,35 @@ description: Install prerequisites, compile a single file, create a GMod project
 
 # Getting Started
 
-This guide walks through the smallest useful Lux workflow with the prebuilt
-`luxc`: install the compiler, compile one file, write a multi-part module, then
+This guide walks through the smallest useful Lux workflow during the alpha:
+build `luxc` from source, compile one file, write a multi-part module, then
 build a GMod addon layout.
 
 ## Requirements
 
 Lux currently targets Lua 5.1 / GLua. For normal addon work you need:
 
-- A prebuilt `luxc` release.
+- A Rust toolchain to build `luxc` while no public binary release is active.
 - A Garry's Mod addon directory when testing generated artifacts in game.
 - Optional `gmad.exe` when packaging `.gma` files.
 
-Download the latest Windows release from [GitHub Releases](https://github.com/TimeWatcher/lux/releases).
-
-Extract it somewhere stable:
-
-```text
-tools/
-  luxc/
-    luxc.exe
-```
-
-Run the compiler from that directory:
+Build the compiler:
 
 ```powershell
-.\tools\luxc\luxc.exe --help
+git clone https://github.com/TimeWatcher/lux.git
+cd lux\compiler
+cargo build --release
+.\target\release\luxc.exe --help
 ```
 
-For shorter commands, add the extracted directory to `PATH`, then use:
+For shorter commands, add `compiler\target\release` to `PATH`, then use:
 
 ```powershell
 luxc --help
 ```
 
-If you are developing the compiler itself, clone the main repository and build
-from source:
-
-```powershell
-git clone https://github.com/TimeWatcher/lux.git
-cd lux\compiler
-cargo test
-cargo build
-```
+The examples below assume `luxc` is on `PATH`. Replace it with
+`.\target\release\luxc.exe` if you run from the compiler directory.
 
 ## Compile One File
 
@@ -169,7 +155,7 @@ as `@lux/std` or `@lux/gmod`:
 
 ```powershell
 luxc init my_addon --std
-luxc install @lux/gmod --from github:TimeWatcher/lux-packages --project my_addon
+luxc install @lux/gmod --from github:TimeWatcher/lux-std --project my_addon
 ```
 
 Create `lux.toml` at the project root:
@@ -184,7 +170,13 @@ out = "generated/lua"
 runtime_base = "lux/my-addon"
 autorun = true
 source_comments = "readable"
+
+[dependencies]
 ```
+
+Lux has no package registry. `lux.toml` chooses concrete package sources with
+`github`, `url`, or `path`, and can pin GitHub package sets with `tag`,
+`branch`, or `commit`. `lux.lock` records the resolved package graph.
 
 Recommended layout:
 
@@ -210,8 +202,8 @@ luxc gmod build --manifest lux.toml
 
 The build step discovers modules under `source_root`, infers realms from file
 prefixes and folders, resolves package imports, emits Lua artifacts under
-`out`, writes the Lux loader tree under `runtime_base`, and writes an optional
-addon `autorun` forwarder.
+`out`, writes a relative-path-safe Lux loader tree under `runtime_base`, and
+writes an optional addon `autorun` forwarder.
 
 ## Build from Explicit Paths
 

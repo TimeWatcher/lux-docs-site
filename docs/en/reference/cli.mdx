@@ -1,26 +1,28 @@
 ---
 title: CLI Reference
-description: luxc commands for lexing, parsing, linting, formatting, compiling, LSP, GMod builds, error mapping, and GMA packaging.
+description: luxc commands for lexing, parsing, linting, formatting, compiling, LSP, packages, GMod builds, API data, error mapping, and GMA packaging.
 ---
 
 # CLI Reference
 
-The CLI reference assumes the prebuilt `luxc` is available on `PATH`. Download
-the release archive and run commands as:
+No public binary release is currently active. During the alpha, build `luxc`
+from source and either add `compiler\target\release` to `PATH` or use the
+explicit executable path.
+
+With `luxc` on `PATH`, run commands as:
 
 ```powershell
 luxc <command>
 ```
 
-If `luxc` is not on `PATH`, use the explicit executable path:
+If `luxc` is not on `PATH`, use the explicit build output:
 
 ```powershell
-.\tools\luxc\luxc.exe <command>
+.\compiler\target\release\luxc.exe <command>
 ```
 
-Compiler contributors can run the same commands from source, but normal Lux
-projects should use the prebuilt `luxc`. Official packages such as `@lux/std`
-are installed per project with `luxc init --std` or `luxc install`.
+Official packages such as `@lux/std` are installed per project with
+`luxc init --std` or `luxc install`.
 
 ## Command Overview
 
@@ -41,6 +43,7 @@ luxc map-error <map.json> <generated-line>
 luxc gmod build <source-root> --out <path> [--runtime-base <path>] [--no-autorun] [--dry-run]
 luxc gmod build --manifest <lux.toml> [--out <path>] [--runtime-base <path>] [--no-autorun] [--dry-run]
 luxc gmod package --manifest <lux.toml> --root <path> --gmad <path> --out <path> [--run] [--build-out <path>] [--runtime-base <path>] [--no-autorun]
+luxc gmod api update [--out <path>] [--coverage-out <path>] [--cache-dir <path>] [--offline] [--allow-failures]
 ```
 
 All paths are read and written as UTF-8 text.
@@ -150,7 +153,7 @@ luxc init my_addon --no-autorun --out generated
 Add a direct package dependency and rewrite `lux.lock`:
 
 ```powershell
-luxc install @lux/gmod --from github:TimeWatcher/lux-packages --project my_addon
+luxc install @lux/gmod --from github:TimeWatcher/lux-std --project my_addon
 ```
 
 Lux has no registry. The source passed with `--from` selects the package set:
@@ -288,3 +291,17 @@ Packaging does not replace `gmod build`; it packages the addon layout produced
 by the build step. `--root` is the package root passed to `gmad`; it is separate
 from the build `out` path. Use `--build-out` only when the package command
 should temporarily override the manifest build output.
+
+## `gmod api update`
+
+Regenerate the bundled official GMod API database:
+
+```powershell
+luxc gmod api update `
+  --out lsp\crates\gmod-api-db\data\generated\gmod_api.json `
+  --coverage-out lsp\crates\gmod-api-db\data\generated\coverage_manifest.json `
+  --cache-dir lsp\target\gmod-api-cache
+```
+
+Use `--offline` only with an existing cache. `--allow-failures` is for parser
+development and should not be used for release-quality bundled data.

@@ -1,6 +1,6 @@
 ---
 title: 快速开始
-description: 安装预构建 luxc，创建最小 GMod 项目，编译并定位生成文件。
+description: 从源码构建 luxc，创建最小 GMod 项目，编译并定位生成文件。
 ---
 
 # 快速开始
@@ -9,42 +9,26 @@ Lux 是面向 GLua 的离线编译语言。你在项目里写 `.lux` 文件，`l
 解析、宏展开、模块解析、运行域检查和 Lua 生成。进入 GMod 的仍然是普通 Lua 5.1 /
 GLua 文件，因此不需要游戏内解析器。
 
-本页默认使用 GitHub Release 里的预构建 `luxc`。只有你要开发 Lux 编译器本身时，
-才需要从源码用 Cargo 构建。
+当前没有有效的公开二进制 release。本页按 alpha 阶段的真实流程写：先从源码构建
+`luxc`，再编译单文件、创建模块和构建 GMod 项目。
 
 ## 环境要求
 
-- 预构建 `luxc`：从 GitHub Release 下载。
+- Rust toolchain：当前需要用 Cargo 构建 `luxc`。
 - Garry's Mod：只有构建、运行插件时需要。
 - 可选的 `gmad.exe`：只有打包 `.gma` 时需要。
 
-从 [GitHub Releases](https://github.com/TimeWatcher/lux/releases) 下载最新 Windows 预构建包。
-
-解压后保持这个结构：
-
-```text
-tools/
-  luxc/
-    luxc.exe
-```
-
-确认编译器可运行：
-
-```powershell
-.\tools\luxc\luxc.exe --help
-```
-
-也可以把 `tools\luxc` 加入 `PATH`，之后直接使用 `luxc ...`。下面示例都假设
-`luxc` 已经在 `PATH` 中。
-
-如果你要开发编译器源码，再使用：
+构建并确认编译器可运行：
 
 ```powershell
 git clone https://github.com/TimeWatcher/lux.git
 cd lux\compiler
-cargo test
-cargo build
+cargo build --release
+.\target\release\luxc.exe --help
 ```
+
+可以把 `compiler\target\release` 加入 `PATH`，之后直接使用 `luxc ...`。下面示例都
+假设 `luxc` 已经在 `PATH` 中；如果没有，请换成 `.\target\release\luxc.exe`。
 
 ## 编译单个文件
 
@@ -174,7 +158,7 @@ luxc init my_addon
 
 ```powershell
 luxc init my_addon --std
-luxc install @lux/gmod --from github:TimeWatcher/lux-packages --project my_addon
+luxc install @lux/gmod --from github:TimeWatcher/lux-std --project my_addon
 ```
 
 最小项目只需要一个 `lux.toml` 和 `src` 目录：
@@ -207,6 +191,8 @@ source_comments = "boundary"
 
 [target.gmod.realm]
 unknown_external = "warn"
+
+[dependencies]
 ```
 
 字段含义：
@@ -218,6 +204,10 @@ unknown_external = "warn"
 - `source_comments`：生成 Lua 的源码注释密度。
 - `bundle_id`：生成私有注册表命名用的稳定标识。
 - `unknown_external`：未知外部符号策略，见 GMod 外部 API 文档。
+
+Lux 没有 package registry。`lux.toml` 通过显式 `github`、`url` 或 `path` 选择包
+来源，并可用 `tag`、`branch` 或 `commit` 固定 GitHub package set。`lux.lock`
+记录解析后的依赖图。
 
 构建：
 

@@ -24,6 +24,9 @@ GMod 后端把这些规则从手写 loader 迁移到编译器构建计划里。
 
 后端不会自动发布 Workshop，也不会在没有 `--run` 的情况下调用 `gmad`。
 
+后端不会假设所有项目都必须拥有 `lua/autorun`。普通 `init` 默认生成 addon-friendly
+配置；当已有 gamemode、框架或手写入口负责启动时，设置 `autorun = false` 即可。
+
 ## 最小配置
 
 ```toml

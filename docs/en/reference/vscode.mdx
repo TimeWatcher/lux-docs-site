@@ -4,10 +4,15 @@ Lux editor support is provided by the `lux-vscode` extension launching the selec
 
 ## Install
 
-Download the latest `lux-vscode-*.vsix` from [Lux LSP releases](https://github.com/TimeWatcher/lux-lsp/releases), then install it in VS Code:
+No public VSIX release is currently active. During the alpha, build the VS Code
+extension from the `lsp` submodule and install the generated VSIX:
 
 ```powershell
-code --install-extension .\lux-vscode-0.1.0.vsix
+cd lsp\vscode-lux
+npm install
+npm run compile
+npm run package
+code --install-extension (Get-ChildItem .\lux-vscode-*.vsix | Select-Object -First 1).FullName
 ```
 
 The VSIX does not include a separate language server binary. Configure the compiler executable you want the editor to use, or make it available through the workspace or `PATH`:
@@ -56,9 +61,10 @@ The current server supports:
 - export list completion from module-scope bindings
 - GMod API root/member completion
 - method completion from inferred receiver facts such as `LocalPlayer()` and `vgui.Create("DButton")`
-- hover for Lux bindings, exports, imports, known GMod APIs, hooks, and official docs
-- signature help for functions, methods, and hook callbacks
-- definition across files in a multi-part module
+- hover for Lux bindings, exports, imports, cross-part definitions, imported module exports, known GMod APIs, hooks, and official docs
+- signature help for Lux functions, GMod functions, methods, and hook callbacks
+- argument count diagnostics for known Lux function calls
+- definition across files in a multi-part module and through imported module exports
 - semantic tokens for Lux syntax and known/unknown external symbols
 - formatting through the compiler formatter
 

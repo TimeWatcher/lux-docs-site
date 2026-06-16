@@ -51,6 +51,11 @@ forwarder under `out/autorun`; `autorun = false` leaves startup to your own
 entry point. `bundle_id` controls generated registry names; set it when emitted
 names must remain stable across machines.
 
+This split is deliberate: `out` can point at a generated folder, a live addon
+Lua root, or a gamemode integration path, while generated Lua still contains
+only GMod-relative paths. Do not treat `runtime_base` as an operating-system
+directory or addon root.
+
 `package_roots` is optional and normally unnecessary for installed packages.
 `lux.lock` roots are loaded automatically after `luxc install`. Use
 `package_roots` for local package development checkouts.
@@ -174,7 +179,8 @@ generated/
 
 The loader tree starts at `runtime_base`. The `autorun` file is only a forwarder
 that includes the generated loaders. With `autorun = false`, Lux still emits the
-same loader tree and module files, but no `out/autorun` entry.
+same loader tree and module files, but no `out/autorun` entry; your gamemode,
+framework, or hand-written Lua can include the generated loaders explicitly.
 
 Generated output should be treated as build output. Do not edit generated files
 by hand.

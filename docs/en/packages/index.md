@@ -42,7 +42,7 @@ Install the official package set per project:
 
 ```powershell
 luxc init my_addon --std
-luxc install @lux/gmod --from github:TimeWatcher/lux-packages --project my_addon
+luxc install @lux/gmod --from github:TimeWatcher/lux-std --project my_addon
 ```
 
 Locked package roots are loaded automatically from `lux.lock`.
@@ -70,7 +70,7 @@ packages that are no longer required.
 Package phase directories use the same module part model as projects:
 
 ```text
-packages/vendor/widgets/src/
+packages/acme/widgets/src/
   module.lux
   cl_base.lux
   cl_progress.lux

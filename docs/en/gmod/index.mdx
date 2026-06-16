@@ -29,6 +29,10 @@ The result is a relative-path-safe Lua output tree. Addon projects normally put
 that tree under `generated/lua`; gamemodes or framework integrations can point
 `out` somewhere else and include the loaders manually.
 
+The backend does not assume every project owns `lua/autorun`. Plain `init`
+defaults to addon-friendly output, but `autorun = false` is enough when another
+entry point should own startup.
+
 ## Minimal Configuration
 
 ```toml

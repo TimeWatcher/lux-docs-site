@@ -41,7 +41,7 @@ package code 不会被写死在 Rust codegen 里。
 
 ```powershell
 luxc init my_addon --std
-luxc install @lux/gmod --from github:TimeWatcher/lux-packages --project my_addon
+luxc install @lux/gmod --from github:TimeWatcher/lux-std --project my_addon
 ```
 
 `lux.lock` 里的 package root 会自动加载。`lux.toml` 的 `package_roots` 主要用于本地
@@ -65,7 +65,7 @@ package。
 package phase 目录也使用同一套 module part model：
 
 ```text
-packages/vendor/widgets/src/
+packages/acme/widgets/src/
   module.lux
   cl_base.lux
   cl_progress.lux

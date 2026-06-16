@@ -4,10 +4,15 @@ Lux 的编辑器支持由 `lux-vscode` 扩展启动选定 compiler 的 `luxc lsp
 
 ## 安装
 
-从 [Lux LSP releases](https://github.com/TimeWatcher/lux-lsp/releases) 下载最新的 `lux-vscode-*.vsix`，然后在 VS Code 中安装：
+当前没有有效的公开 VSIX release。alpha 阶段请从 `lsp` submodule 本地打包 VS Code
+扩展，然后安装生成的 VSIX：
 
 ```powershell
-code --install-extension .\lux-vscode-0.1.0.vsix
+cd lsp\vscode-lux
+npm install
+npm run compile
+npm run package
+code --install-extension (Get-ChildItem .\lux-vscode-*.vsix | Select-Object -First 1).FullName
 ```
 
 VSIX 不再内置独立 language server binary。请配置你希望编辑器使用的 compiler executable，或让它能从 workspace / `PATH` 找到：
@@ -56,9 +61,10 @@ luxc lsp
 - 基于 module-scope binding 的 export list completion
 - GMod API root/member completion
 - 基于 `LocalPlayer()`、`vgui.Create("DButton")` 等事实推断的 method completion
-- Lux binding、export、import、已知 GMod API、hook 和官方文档 hover
-- function、method、hook callback signature help
-- multi-part module 跨文件 definition
+- Lux binding、export、import、跨 part 定义、导入模块 export、已知 GMod API、hook 和官方文档 hover
+- Lux function、GMod function、method、hook callback signature help
+- 已知 Lux function call 的参数数量诊断
+- multi-part module 跨文件 definition，以及通过 imported module export 跳转到真实定义
 - Lux 语法、known external、unknown external 的 semantic tokens
 - 通过 compiler formatter 格式化文档
 

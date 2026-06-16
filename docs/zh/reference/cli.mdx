@@ -1,25 +1,26 @@
 ---
 title: 命令行参考
-description: luxc 的 lex、parse、lint、format、compile、LSP、map-error、gmod build 和 gmod package。
+description: luxc 的 lex、parse、lint、format、compile、LSP、package、map-error、gmod build、gmod api update 和 gmod package。
 ---
 
 # 命令行参考
 
-本页默认你已经下载 GitHub Release 中的预构建 `luxc`，并把它加入了 `PATH`：
+当前没有有效的公开二进制 release。alpha 阶段请从源码构建 `luxc`，然后把
+`compiler\target\release` 加入 `PATH`，或直接使用构建产物路径。
+
+加入 `PATH` 后：
 
 ```powershell
 luxc <command>
 ```
 
-如果没有加入 `PATH`，也可以使用明确路径：
+如果没有加入 `PATH`：
 
 ```powershell
-.\tools\luxc\luxc.exe <command>
+.\compiler\target\release\luxc.exe <command>
 ```
 
-只有开发编译器源码时，才需要从源码仓库通过 Cargo 运行同一批命令；普通 Lux 项目应
-使用预构建 `luxc`。`@lux/std` 等官方 package 通过 `luxc init --std` 或 `luxc install`
-按项目安装。
+`@lux/std` 等官方 package 通过 `luxc init --std` 或 `luxc install` 按项目安装。
 
 ## 命令总览
 
@@ -40,6 +41,7 @@ luxc map-error <map.json> <generated-line>
 luxc gmod build <source-root> --out <path> [--runtime-base <path>] [--no-autorun] [--dry-run]
 luxc gmod build --manifest <lux.toml> [--out <path>] [--runtime-base <path>] [--no-autorun] [--dry-run]
 luxc gmod package --manifest <lux.toml> --root <path> --gmad <path> --out <path> [--run] [--build-out <path>] [--runtime-base <path>] [--no-autorun]
+luxc gmod api update [--out <path>] [--coverage-out <path>] [--cache-dir <path>] [--offline] [--allow-failures]
 ```
 
 ## lex
@@ -145,7 +147,7 @@ luxc init my_addon --no-autorun --out generated
 添加直接 package 依赖并重写 `lux.lock`：
 
 ```powershell
-luxc install @lux/gmod --from github:TimeWatcher/lux-packages --project my_addon
+luxc install @lux/gmod --from github:TimeWatcher/lux-std --project my_addon
 ```
 
 Lux 没有 registry。`--from` 直接选择 package set 来源：`github:owner/repo`、zip
@@ -295,3 +297,17 @@ luxc gmod package --manifest path\to\lux.toml --root generated --gmad path\to\gm
 没有 `--run` 时不会调用 `gmad`。这是为了避免构建命令意外生成或覆盖发布包。`--root`
 是传给 `gmad` 的打包根，和构建输出 `out` 是两个概念。只有需要临时覆盖 manifest
 构建输出时才使用 `--build-out`。
+
+## gmod api update
+
+重新生成内置官方 GMod API 数据库：
+
+```powershell
+luxc gmod api update `
+  --out lsp\crates\gmod-api-db\data\generated\gmod_api.json `
+  --coverage-out lsp\crates\gmod-api-db\data\generated\coverage_manifest.json `
+  --cache-dir lsp\target\gmod-api-cache
+```
+
+`--offline` 只适合已有 cache 的情况。`--allow-failures` 只用于 parser 开发，不应用于
+发布质量的 bundled data。
