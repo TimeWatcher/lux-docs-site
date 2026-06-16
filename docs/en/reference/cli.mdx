@@ -1,6 +1,6 @@
 ---
 title: CLI Reference
-description: luxc commands for lexing, parsing, linting, formatting, compiling, GMod builds, error mapping, and GMA packaging.
+description: luxc commands for lexing, parsing, linting, formatting, compiling, LSP, GMod builds, error mapping, and GMA packaging.
 ---
 
 # CLI Reference
@@ -35,6 +35,7 @@ luxc remove <package-id> [--project <project-root>]
 luxc lock [project-root]
 luxc list [project-root]
 luxc doctor [project-root]
+luxc lsp
 luxc compile <path> [--map <path>] [--source-comments none|readable|boundary|dense]
 luxc map-error <map.json> <generated-line>
 luxc gmod build <source-root> --out <path> [--runtime-base <path>] [--no-autorun] [--dry-run]
@@ -195,6 +196,18 @@ Inspect package manager state:
 ```powershell
 luxc doctor my_addon
 ```
+
+## `lsp`
+
+Start the compiler-backed Language Server Protocol process:
+
+```powershell
+luxc lsp
+```
+
+Editors should launch this command from the compiler selected by the project or
+user configuration. This keeps diagnostics, completions, package resolution,
+and builds on the same `luxc` version.
 
 ## `compile`
 

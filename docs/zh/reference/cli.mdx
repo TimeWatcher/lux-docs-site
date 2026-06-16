@@ -1,6 +1,6 @@
 ---
 title: 命令行参考
-description: luxc 的 lex、parse、lint、format、compile、map-error、gmod build 和 gmod package。
+description: luxc 的 lex、parse、lint、format、compile、LSP、map-error、gmod build 和 gmod package。
 ---
 
 # 命令行参考
@@ -34,6 +34,7 @@ luxc remove <package-id> [--project <project-root>]
 luxc lock [project-root]
 luxc list [project-root]
 luxc doctor [project-root]
+luxc lsp
 luxc compile <path> [--map <path>] [--source-comments [none|readable|boundary|dense]]
 luxc map-error <map.json> <generated-line>
 luxc gmod build <source-root> --out <path> [--runtime-base <path>] [--no-autorun] [--dry-run]
@@ -188,6 +189,17 @@ luxc list my_addon
 ```powershell
 luxc doctor my_addon
 ```
+
+## lsp
+
+启动由 compiler 提供的 Language Server Protocol 进程：
+
+```powershell
+luxc lsp
+```
+
+编辑器应该启动项目或用户配置选中的 compiler。这样 diagnostics、completion、package
+resolution 和 build 都使用同一个 `luxc` 版本。
 
 ## compile
 
