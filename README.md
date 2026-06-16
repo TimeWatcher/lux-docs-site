@@ -4,7 +4,7 @@ This repository contains the public Lux documentation site.
 
 - Live site: <https://timewatcher.github.io/lux-docs-site/>
 - Main repository: <https://github.com/TimeWatcher/lux>
-- Standard packages: <https://github.com/TimeWatcher/lux-std>
+- Standard packages: <https://github.com/TimeWatcher/lux-packages>
 
 The site is built with Rspress and maintained as the `docs-site/` submodule of
 the main Lux repository.

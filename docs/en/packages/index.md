@@ -27,7 +27,7 @@ A package can combine phases. `@lux/ui` currently acts as a syntax-facing layer
 with host transforms. `@lux/macros` exposes compile-time macros. Runtime
 package code is not embedded in Rust codegen.
 
-## Official `lux-std` packages
+## Official Lux packages
 
 - `@lux/std`
 - `@lux/gmod`
@@ -42,7 +42,9 @@ Install the official package set per project:
 
 ```powershell
 luxc init my_addon --std
-luxc install @lux/gmod --from github:TimeWatcher/lux-std --project my_addon
+Push-Location my_addon
+luxc install @lux/gmod --from github:TimeWatcher/lux-packages
+Pop-Location
 ```
 
 Locked package roots are loaded automatically from `lux.lock`.

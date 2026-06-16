@@ -155,7 +155,9 @@ as `@lux/std` or `@lux/gmod`:
 
 ```powershell
 luxc init my_addon --std
-luxc install @lux/gmod --from github:TimeWatcher/lux-std --project my_addon
+Push-Location my_addon
+luxc install @lux/gmod --from github:TimeWatcher/lux-packages
+Pop-Location
 ```
 
 Create `lux.toml` at the project root:

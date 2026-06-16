@@ -158,7 +158,9 @@ luxc init my_addon
 
 ```powershell
 luxc init my_addon --std
-luxc install @lux/gmod --from github:TimeWatcher/lux-std --project my_addon
+Push-Location my_addon
+luxc install @lux/gmod --from github:TimeWatcher/lux-packages
+Pop-Location
 ```
 
 最小项目只需要一个 `lux.toml` 和 `src` 目录：

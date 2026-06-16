@@ -153,7 +153,9 @@ luxc init my_addon --no-autorun --out generated
 Add a direct package dependency and rewrite `lux.lock`:
 
 ```powershell
-luxc install @lux/gmod --from github:TimeWatcher/lux-std --project my_addon
+Push-Location my_addon
+luxc install @lux/gmod --from github:TimeWatcher/lux-packages
+Pop-Location
 ```
 
 Lux has no registry. The source passed with `--from` selects the package set:

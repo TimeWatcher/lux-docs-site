@@ -26,7 +26,7 @@ host/         host transform Lux，由 luxc 离线执行
 transform，但还不是具体 UI 后端。`@lux/macros` 暴露 compile-time macro。runtime
 package code 不会被写死在 Rust codegen 里。
 
-## 官方 `lux-std` packages
+## 官方 Lux packages
 
 - `@lux/std`
 - `@lux/gmod`
@@ -41,7 +41,9 @@ package code 不会被写死在 Rust codegen 里。
 
 ```powershell
 luxc init my_addon --std
-luxc install @lux/gmod --from github:TimeWatcher/lux-std --project my_addon
+Push-Location my_addon
+luxc install @lux/gmod --from github:TimeWatcher/lux-packages
+Pop-Location
 ```
 
 `lux.lock` 里的 package root 会自动加载。`lux.toml` 的 `package_roots` 主要用于本地
