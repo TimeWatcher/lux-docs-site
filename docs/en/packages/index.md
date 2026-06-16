@@ -42,7 +42,7 @@ Install the official package set per project:
 
 ```powershell
 luxc init my_addon --std
-luxc install @lux/gmod --from github:TimeWatcher/lux-std --project my_addon
+luxc install @lux/gmod --from github:TimeWatcher/lux-packages --project my_addon
 ```
 
 Locked package roots are loaded automatically from `lux.lock`.
