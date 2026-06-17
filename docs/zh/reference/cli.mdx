@@ -29,12 +29,20 @@ luxc lex <path>
 luxc parse <path>
 luxc lint <path>
 luxc format <path> [--check] [--write]
+luxc build <source-root> --out <path> [--map] [--source-comments [none|readable|boundary|dense]]
 luxc init [path] [--name <name>] [--std] [--out <path>] [--runtime-base <path>] [--no-autorun]
 luxc install <package-id> --from <github:owner/repo|url|path> [--tag <tag>|--branch <branch>|--commit <commit>]
 luxc remove <package-id> [--project <project-root>]
 luxc lock [project-root]
 luxc list [project-root]
 luxc doctor [project-root]
+luxc self install [version] [--from <path|url>] [--default]
+luxc self update
+luxc self default <version>
+luxc self list
+luxc self which [--project <project-root>]
+luxc self pin <version> [--project <project-root>]
+luxc self unpin [--project <project-root>]
 luxc lsp
 luxc compile <path> [--map <path>] [--source-comments [none|readable|boundary|dense]]
 luxc map-error <map.json> <generated-line>
@@ -110,6 +118,24 @@ luxc format examples\features.lux
 ```
 
 `--check` 与 `--write` 不能同时使用。
+
+## build
+
+把目录下的 `.lux` 文件按单文件方式递归编译，并在输出目录里保留相对路径：
+
+```powershell
+luxc build src --out generated/lua
+```
+
+这个命令用于渐进式 GLua 集成：需要语法增强，但不希望 Lux 生成 GMod loader tree。
+每个输入文件都像 `luxc compile` 一样独立编译，因此不会按项目图解析 import、package、
+export 和 realm。
+
+调试生成 Lua 时可以同时写 source map 和 source comment：
+
+```powershell
+luxc build src --out generated/lua --map --source-comments readable
+```
 
 ## init
 
@@ -192,6 +218,40 @@ luxc list my_addon
 
 ```powershell
 luxc doctor my_addon
+```
+
+## self
+
+把当前 compiler 安装到用户 toolchain 目录，并设为全局默认：
+
+```powershell
+luxc self install --default
+```
+
+稳定用户入口是 Unix-like 系统下的 `~/.lux/bin/luxc`，Windows 下是
+`%USERPROFILE%\.lux\bin\luxc.exe`。已安装 compiler 位于
+`~/.lux/toolchains/<version>/`。
+
+等二进制 release 重新启用后，可以安装或更新指定版本：
+
+```powershell
+luxc self update
+luxc self install 0.1.0-alpha.4 --default
+```
+
+查看和选择已安装版本：
+
+```powershell
+luxc self list
+luxc self which
+luxc self default 0.1.0-alpha.4
+```
+
+大多数项目使用全局默认版本。只有团队或 CI 需要固定 compiler 时才 pin：
+
+```powershell
+luxc self pin 0.1.0-alpha.4 --project my_addon
+luxc self unpin --project my_addon
 ```
 
 ## lsp

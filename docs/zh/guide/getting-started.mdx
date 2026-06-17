@@ -32,7 +32,9 @@ cargo build --release
 
 ## 编译单个文件
 
-仓库里的 `examples/features.lux` 覆盖了大部分语言特性，可以先用它确认编译器输出：
+仓库里的 `examples/features.lux` 是单文件语法增强示例。它刻意不使用
+`import`、`export`、package、macro 或 top-level realm，用来确认不创建项目时的
+编译器输出：
 
 ```powershell
 luxc compile examples\features.lux --source-comments readable
@@ -54,6 +56,9 @@ readable  适合直接阅读
 boundary  只标注关键边界
 dense     尽量密集地标注
 ```
+
+需要学习工程化写法时看 `examples/gmod_project`。那里才展示 manifest、跨模块
+import/export、`client` / `server` / `shared` 归属、package 依赖和 GMod loader。
 
 ## 写第一个模块
 

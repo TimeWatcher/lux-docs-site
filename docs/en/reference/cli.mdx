@@ -31,12 +31,20 @@ luxc lex <path>
 luxc parse <path>
 luxc lint <path>
 luxc format <path> [--check] [--write]
+luxc build <source-root> --out <path> [--map] [--source-comments none|readable|boundary|dense]
 luxc init [path] [--name <name>] [--std] [--out <path>] [--runtime-base <path>] [--no-autorun]
 luxc install <package-id> --from <github:owner/repo|url|path> [--tag <tag>|--branch <branch>|--commit <commit>]
 luxc remove <package-id> [--project <project-root>]
 luxc lock [project-root]
 luxc list [project-root]
 luxc doctor [project-root]
+luxc self install [version] [--from <path|url>] [--default]
+luxc self update
+luxc self default <version>
+luxc self list
+luxc self which [--project <project-root>]
+luxc self pin <version> [--project <project-root>]
+luxc self unpin [--project <project-root>]
 luxc lsp
 luxc compile <path> [--map <path>] [--source-comments none|readable|boundary|dense]
 luxc map-error <map.json> <generated-line>
@@ -115,6 +123,26 @@ luxc format src\inventory\module.lux --write
 Formatter output is intended to preserve comments and keep Lux-specific syntax
 readable. Generated Lua formatting is controlled by the emitter, not this
 command.
+
+## `build`
+
+Recursively compile `.lux` files under a source directory as isolated files and
+preserve their source-relative paths in the output directory:
+
+```powershell
+luxc build src --out generated/lua
+```
+
+This is for gradual GLua integration where you want syntax improvements but do
+not want Lux to generate a GMod loader tree. Each input file is compiled like
+`luxc compile`, so imports, packages, exports, and realms are not resolved as a
+project graph.
+
+Add source maps and comments when debugging generated Lua:
+
+```powershell
+luxc build src --out generated/lua --map --source-comments readable
+```
 
 ## `init`
 
@@ -200,6 +228,42 @@ Inspect package manager state:
 
 ```powershell
 luxc doctor my_addon
+```
+
+## `self`
+
+Install the current compiler into the user toolchain layout and make it the
+global default:
+
+```powershell
+luxc self install --default
+```
+
+The stable user entrypoint is `~/.lux/bin/luxc` on Unix-like systems and
+`%USERPROFILE%\.lux\bin\luxc.exe` on Windows. Installed compilers live under
+`~/.lux/toolchains/<version>/`.
+
+Once binary releases are active, install or update explicit versions:
+
+```powershell
+luxc self update
+luxc self install 0.1.0-alpha.4 --default
+```
+
+Inspect and select installed versions:
+
+```powershell
+luxc self list
+luxc self which
+luxc self default 0.1.0-alpha.4
+```
+
+Most projects use the global default. Pin only when a team or CI job needs a
+specific compiler:
+
+```powershell
+luxc self pin 0.1.0-alpha.4 --project my_addon
+luxc self unpin --project my_addon
 ```
 
 ## `lsp`

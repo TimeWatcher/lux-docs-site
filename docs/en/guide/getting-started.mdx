@@ -52,6 +52,10 @@ Single-file compilation is useful for checking syntax, generated Lua shape, and
 small language examples. GMod projects normally use `luxc gmod build` so the
 compiler can discover modules, split realms, and emit loaders.
 
+The repository's `examples/features.lux` is deliberately a single-file syntax
+tour. It does not teach imports, exports, packages, macros, or top-level realm
+ownership. Use `examples/gmod_project` for the project/module model.
+
 ## Write a First Module
 
 Create a module directory. A multi-file module needs an entry part.
