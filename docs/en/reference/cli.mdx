@@ -5,9 +5,10 @@ description: luxc commands for lexing, parsing, linting, formatting, compiling, 
 
 # CLI Reference
 
-No public binary release is currently active. During the alpha, build `luxc`
-from source and either add `compiler\target\release` to `PATH` or use the
-explicit executable path.
+`luxc` is distributed as an alpha toolchain binary and can also be built from
+source. Install the published prerelease, or build the current checkout and run
+`luxc self install --default` to place the selected compiler in the user
+toolchain layout.
 
 With `luxc` on `PATH`, run commands as:
 
@@ -15,10 +16,12 @@ With `luxc` on `PATH`, run commands as:
 luxc <command>
 ```
 
-If `luxc` is not on `PATH`, use the explicit build output:
+If `luxc` is not on `PATH`, use the explicit build output or installed user
+entrypoint:
 
 ```powershell
 .\compiler\target\release\luxc.exe <command>
+%USERPROFILE%\.lux\bin\luxc.exe <command>
 ```
 
 Official packages such as `@lux/std` are installed per project with
@@ -243,11 +246,11 @@ The stable user entrypoint is `~/.lux/bin/luxc` on Unix-like systems and
 `%USERPROFILE%\.lux\bin\luxc.exe` on Windows. Installed compilers live under
 `~/.lux/toolchains/<version>/`.
 
-Once binary releases are active, install or update explicit versions:
+Install or update explicit versions:
 
 ```powershell
 luxc self update
-luxc self install 0.1.0-alpha.4 --default
+luxc self install 0.1.0-alpha.1 --default
 ```
 
 Inspect and select installed versions:
@@ -255,14 +258,14 @@ Inspect and select installed versions:
 ```powershell
 luxc self list
 luxc self which
-luxc self default 0.1.0-alpha.4
+luxc self default 0.1.0-alpha.1
 ```
 
 Most projects use the global default. Pin only when a team or CI job needs a
 specific compiler:
 
 ```powershell
-luxc self pin 0.1.0-alpha.4 --project my_addon
+luxc self pin 0.1.0-alpha.1 --project my_addon
 luxc self unpin --project my_addon
 ```
 

@@ -1,18 +1,18 @@
 # VS Code And LSP
 
-Lux editor support is provided by the `lux-vscode` extension launching the selected compiler as `luxc lsp`. The extension is intentionally thin: it starts the compiler language server, contributes grammar and commands, and displays server results. Lux module resolution, realm checks, import/export completion, hover, diagnostics, and GMod API intelligence come from the same compiler version used for builds.
+Lux editor support is provided by the `lux-gmod` extension launching the selected compiler as `luxc lsp`. The extension is intentionally thin: it starts the compiler language server, contributes grammar and commands, and displays server results. Lux module resolution, realm checks, import/export completion, hover, diagnostics, and GMod API intelligence come from the same compiler version used for builds.
 
 ## Install
 
-No public VSIX release is currently active. During the alpha, build the VS Code
-extension from the `lsp` submodule and install the generated VSIX:
+The extension package is `Althurdinok.lux-gmod`. During alpha development you
+can also build a local VSIX from the `lsp/vscode-lux` workspace:
 
 ```powershell
 cd lsp\vscode-lux
 npm install
 npm run compile
 npm run package
-code --install-extension (Get-ChildItem .\lux-vscode-*.vsix | Select-Object -First 1).FullName
+code --install-extension (Get-ChildItem .\lux-gmod-*.vsix | Select-Object -First 1).FullName
 ```
 
 The VSIX does not include a separate language server binary. Configure the compiler executable you want the editor to use, or make it available through the workspace or `PATH`:
@@ -35,8 +35,9 @@ The extension resolves `luxc` from:
 
 1. `lux.compiler.path`
 2. workspace `.lux/bin/luxc`
-3. `LUXC` environment variable
-4. `luxc` on `PATH`
+3. user `~/.lux/bin/luxc`
+4. `LUXC` environment variable
+5. `luxc` on `PATH`
 
 ## Compiler Commands
 

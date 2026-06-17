@@ -9,26 +9,34 @@ Lux 是面向 GLua 的离线编译语言。你在项目里写 `.lux` 文件，`l
 解析、宏展开、模块解析、运行域检查和 Lua 生成。进入 GMod 的仍然是普通 Lua 5.1 /
 GLua 文件，因此不需要游戏内解析器。
 
-当前没有有效的公开二进制 release。本页按 alpha 阶段的真实流程写：先从源码构建
-`luxc`，再编译单文件、创建模块和构建 GMod 项目。
+本页按当前 alpha 阶段的真实流程写：先安装发布版或从源码构建 `luxc`，再编译单文件、
+创建模块和构建 GMod 项目。
 
 ## 环境要求
 
-- Rust toolchain：当前需要用 Cargo 构建 `luxc`。
+- Lux alpha release；如果要从源码构建，则需要 Rust toolchain。
 - Garry's Mod：只有构建、运行插件时需要。
 - 可选的 `gmad.exe`：只有打包 `.gma` 时需要。
 
-构建并确认编译器可运行：
+下载 Lux 主仓库里的当前 alpha release，或从源码构建并安装到用户 toolchain：
 
 ```powershell
 git clone https://github.com/TimeWatcher/lux.git
-cd lux\compiler
-cargo build --release
-.\target\release\luxc.exe --help
+cd lux
+cargo build --manifest-path compiler\Cargo.toml --release
+.\compiler\target\release\luxc.exe self install --default
+.\scripts\install-lux-path.ps1
+luxc --version
 ```
 
-可以把 `compiler\target\release` 加入 `PATH`，之后直接使用 `luxc ...`。下面示例都
-假设 `luxc` 已经在 `PATH` 中；如果没有，请换成 `.\target\release\luxc.exe`。
+Windows 下 self install 后的稳定入口是 `%USERPROFILE%\.lux\bin\luxc.exe`。如果不执行
+`self install`，也可以直接使用构建产物：
+
+```powershell
+.\compiler\target\release\luxc.exe --help
+```
+
+下面示例都假设 `luxc` 已经在 `PATH` 中。
 
 ## 编译单个文件
 

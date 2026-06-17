@@ -23,6 +23,35 @@ Install it per project:
 luxc install @lux/mgfx --from github:TimeWatcher/lux-mgfx
 ```
 
+## Use with Plain GLua
+
+MGFX is not limited to projects that already write Lux source. For existing
+VGUI panels, gamemode UI, or gradual migration work, use the generated
+loader-based distribution and call the installed `MGFX.*` facade from plain
+GLua:
+
+```lua
+function PANEL:Paint(w, h)
+  MGFX.StartPanel(self, w, h)
+  MGFX.RoundedBoxEx(0, 0, w, h, {
+    radius = 10,
+    fill = MGFX.LinearGradient(
+      0,
+      0,
+      1,
+      1,
+      Color(30, 130, 255, 230),
+      Color(255, 210, 110, 230)
+    ),
+  })
+  MGFX.EndPanel()
+end
+```
+
+The distribution still comes from the Lux MGFX package. The difference is that
+the loader has already been generated, initializes the client runtime, and
+installs `MGFX` globally for non-Lux callers.
+
 ## Use from Lux
 
 <LuxLuaPair title="Install the optional MGFX facade" luxLabel="Lux" luaLabel="Generated Lua">

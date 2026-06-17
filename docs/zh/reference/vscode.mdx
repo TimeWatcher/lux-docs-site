@@ -1,18 +1,18 @@
 # VS Code 与 LSP
 
-Lux 的编辑器支持由 `lux-vscode` 扩展启动选定 compiler 的 `luxc lsp` 提供。扩展本身保持很薄：负责启动 compiler language server、贡献语法和命令、展示 server 返回结果。Lux module resolution、realm 检查、import/export completion、hover、diagnostics 和 GMod API 智能都来自实际用于 build 的同一个 compiler 版本。
+Lux 的编辑器支持由 `lux-gmod` 扩展启动选定 compiler 的 `luxc lsp` 提供。扩展本身保持很薄：负责启动 compiler language server、贡献语法和命令、展示 server 返回结果。Lux module resolution、realm 检查、import/export completion、hover、diagnostics 和 GMod API 智能都来自实际用于 build 的同一个 compiler 版本。
 
 ## 安装
 
-当前没有有效的公开 VSIX release。alpha 阶段请从 `lsp` submodule 本地打包 VS Code
-扩展，然后安装生成的 VSIX：
+扩展包名是 `Althurdinok.lux-gmod`。在 alpha 开发阶段，也可以从
+`lsp/vscode-lux` workspace 本地打包 VS Code 扩展：
 
 ```powershell
 cd lsp\vscode-lux
 npm install
 npm run compile
 npm run package
-code --install-extension (Get-ChildItem .\lux-vscode-*.vsix | Select-Object -First 1).FullName
+code --install-extension (Get-ChildItem .\lux-gmod-*.vsix | Select-Object -First 1).FullName
 ```
 
 VSIX 不再内置独立 language server binary。请配置你希望编辑器使用的 compiler executable，或让它能从 workspace / `PATH` 找到：
@@ -35,8 +35,9 @@ luxc lsp
 
 1. `lux.compiler.path`
 2. workspace `.lux/bin/luxc`
-3. `LUXC` 环境变量
-4. `PATH` 中的 `luxc`
+3. 用户目录 `~/.lux/bin/luxc`
+4. `LUXC` 环境变量
+5. `PATH` 中的 `luxc`
 
 ## Compiler 命令
 
