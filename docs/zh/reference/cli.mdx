@@ -5,9 +5,9 @@ description: luxc 的 lex、parse、lint、format、compile、LSP、package、ma
 
 # 命令行参考
 
-`luxc` 现在以 alpha toolchain binary 分发，也可以从源码构建。你可以安装发布的
-prerelease，或者构建当前 checkout 后执行 `luxc self install --default`，把选定的
-compiler 放入用户 toolchain 布局。
+`luxc` 现在以 alpha toolchain binary 分发，也可以从源码构建。release zip 自带
+`install-lux-path.ps1`，会把同目录的 compiler 安装到用户 toolchain 布局；源码构建
+可以使用同一个脚本并传入 `-LuxcPath .\compiler\target\release\luxc.exe`。
 
 加入 `PATH` 后：
 
@@ -224,7 +224,8 @@ luxc doctor my_addon
 
 ## self
 
-把当前 compiler 安装到用户 toolchain 目录，并设为全局默认：
+把当前 compiler 安装到用户 toolchain 目录，并设为全局默认。release zip 通常直接
+运行 `install-lux-path.ps1`；这个命令主要用于显式版本管理和源码构建流程：
 
 ```powershell
 luxc self install --default
@@ -238,7 +239,7 @@ luxc self install --default
 
 ```powershell
 luxc self update
-luxc self install 0.1.0-alpha.1 --default
+luxc self install 0.1.0-alpha.2 --default
 ```
 
 查看和选择已安装版本：
@@ -246,13 +247,13 @@ luxc self install 0.1.0-alpha.1 --default
 ```powershell
 luxc self list
 luxc self which
-luxc self default 0.1.0-alpha.1
+luxc self default 0.1.0-alpha.2
 ```
 
 大多数项目使用全局默认版本。只有团队或 CI 需要固定 compiler 时才 pin：
 
 ```powershell
-luxc self pin 0.1.0-alpha.1 --project my_addon
+luxc self pin 0.1.0-alpha.2 --project my_addon
 luxc self unpin --project my_addon
 ```
 

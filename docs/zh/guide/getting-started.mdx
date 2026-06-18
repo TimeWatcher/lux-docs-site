@@ -18,19 +18,26 @@ GLua 文件，因此不需要游戏内解析器。
 - Garry's Mod：只有构建、运行插件时需要。
 - 可选的 `gmad.exe`：只有打包 `.gma` 时需要。
 
-下载 Lux 主仓库里的当前 alpha release，或从源码构建并安装到用户 toolchain：
+下载 Lux 主仓库里的当前 alpha release，解压后从解压目录运行安装脚本：
+
+```powershell
+Expand-Archive .\luxc-windows-x64.zip -DestinationPath .\luxc-windows-x64 -Force
+.\luxc-windows-x64\install-lux-path.ps1
+luxc --version
+```
+
+如果你需要当前 checkout，而不是已发布的 prerelease，可以从源码构建并安装这个构建产物：
 
 ```powershell
 git clone https://github.com/TimeWatcher/lux.git
 cd lux
 cargo build --manifest-path compiler\Cargo.toml --release
-.\compiler\target\release\luxc.exe self install --default
-.\scripts\install-lux-path.ps1
+.\scripts\install-lux-path.ps1 -LuxcPath .\compiler\target\release\luxc.exe
 luxc --version
 ```
 
-Windows 下 self install 后的稳定入口是 `%USERPROFILE%\.lux\bin\luxc.exe`。如果不执行
-`self install`，也可以直接使用构建产物：
+Windows 下安装后的稳定入口是 `%USERPROFILE%\.lux\bin\luxc.exe`。如果不安装，
+也可以直接使用构建产物：
 
 ```powershell
 .\compiler\target\release\luxc.exe --help
